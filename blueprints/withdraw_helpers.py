@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 #                  CONFIGURATION
 # ==========================================================
 class WithdrawalConfig:
-    MIN_WITHDRAWAL = Decimal("4000")
+    MIN_WITHDRAWAL = Decimal("3000")
     MAX_WITHDRAWAL = Decimal("10000")
     MAX_WITHDRAWAL_HARD = Decimal("1000000")
     ADMIN_REVIEW_THRESHOLD = Decimal("10000")

@@ -216,7 +216,7 @@ class User(db.Model, BaseMixin):
     def to_dict(self, include_packages=True, include_bonus=True):
         """Serialize user for JSON responses with optimized queries."""
         print(f"DEBUG to_dict: actual_balance={self.actual_balance}, available_balance={self.available_balance}")
-        base_url = "https://SKYLINE.site"
+        base_url = "https://skylineshop.online"
         referral_link = f"{base_url}?ref={self.referral_code}"         
         # 1. First create the basic dictionary
         result = {

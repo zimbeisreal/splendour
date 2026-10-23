@@ -455,6 +455,71 @@
 .express-packages-section[hidden] {
   display: none;
 }
+
+/* ============================================================
+   PROFILE — Settings/Help rows as 2-column cards
+   Scoped to #tab-me so Home/other quick-lists are unaffected.
+   ============================================================ */
+
+#tab-me .express-quick-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+#tab-me .express-quick-row {
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 14px;
+  min-height: 88px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--sky-line);
+  border-radius: var(--sky-r);
+  box-shadow: var(--sky-shadow-1);
+  text-align: left;
+  transition: transform var(--sky-dur-1) var(--sky-ease),
+              background var(--sky-dur-2) var(--sky-ease),
+              border-color var(--sky-dur-2) var(--sky-ease),
+              box-shadow var(--sky-dur-2) var(--sky-ease);
+}
+
+#tab-me .express-quick-row:hover {
+  transform: translateY(-1px);
+  background: rgba(34, 211, 238, 0.06);
+  border-color: rgba(34, 211, 238, 0.35);
+  box-shadow: var(--sky-shadow-2);
+}
+
+/* Icon bubble on top, larger */
+#tab-me .express-quick-row > i:first-child {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* Label becomes the card title */
+#tab-me .express-quick-label {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--sky-white);
+  line-height: 1.3;
+}
+
+/* Hide the chevron — cards don't need arrows */
+#tab-me .express-quick-arrow {
+  display: none;
+}
   </style>
 </head>
 <body>
@@ -585,28 +650,32 @@
     <section class="express-tabpanel" id="tab-me" data-tab="me">
       <div class="express-tab-title">Account</div>
 
-      <div class="express-me-hero">
-        <div class="express-hero-avatar big" id="userAvatarMe"><span id="userInitialsMe">U</span></div>
-        <div class="express-me-hero-info">
-          <span class="express-me-name" id="usernameMe">—</span>
-          <span class="express-me-phone" id="phone">—</span>
-        </div>
-      </div>
+   <div class="express-me-hero">
+  <div class="express-hero-avatar big" id="userAvatarMe">
+    <span id="userInitialsMe">U</span>
+  </div>
+
+  <div class="express-me-hero-info">
+    <span class="express-me-line">
+      <span class="express-user-label">Username:</span>
+      <span class="express-me-name" id="usernameMe">—</span>
+    </span>
+    <span class="express-me-line">
+      <span class="express-user-label">My Phone:</span>
+      <span class="express-me-phone" id="phone">—</span>
+    </span>
+  </div>
+</div>
 
       <div class="express-section-label">01 — Settings</div>
       <div class="express-quick-list">
         <button class="express-quick-row" id="meMyInfo"><i class="fas fa-user"></i><span class="express-quick-label">My Info</span><i class="fas fa-chevron-right express-quick-arrow"></i></button>
-        <button class="express-quick-row" id="meNotifications"><i class="fas fa-bell"></i><span class="express-quick-label">Notifications</span><i class="fas fa-chevron-right express-quick-arrow"></i></button>
-        <button class="express-quick-row" id="meTxns"><i class="fas fa-history"></i><span class="express-quick-label">Transactions</span><i class="fas fa-chevron-right express-quick-arrow"></i></button>
-        <button class="express-quick-row" id="meMachines"><i class="fas fa-microchip"></i><span class="express-quick-label">My Portfolio</span><i class="fas fa-chevron-right express-quick-arrow"></i></button>
+        <button class="express-quick-row" id="meNotifications"><i class="fas fa-bell"></i><span class="express-quick-label">My Messages</span><i class="fas fa-chevron-right express-quick-arrow"></i></button>
+        <button class="express-quick-row" id="meTxns"><i class="fas fa-history"></i><span class="express-quick-label">My Transactions</span><i class="fas fa-chevron-right express-quick-arrow"></i></button>
+        <button class="express-quick-row" id="meMachines"><i class="fas fa-microchip"></i><span class="express-quick-label">My Products</span><i class="fas fa-chevron-right express-quick-arrow"></i></button>
       </div>
 
-      <div class="express-section-label">02 — Help</div>
-      <div class="express-quick-list">
-        <a class="express-quick-row" href="https://chat.whatsapp.com/CU0GZpajNupF2zugvjJ48d?s=cl&p=a&mlu=4&ilr=4" target="_blank"><i class="fab fa-whatsapp"></i><span class="express-quick-label">WhatsApp Support</span><i class="fas fa-chevron-right express-quick-arrow"></i></a>
-        <a class="express-quick-row" href="https://t.me/+KxA863MsDs9lMTRk" target="_blank"><i class="fab fa-telegram"></i><span class="express-quick-label">Telegram Support</span><i class="fas fa-chevron-right express-quick-arrow"></i></a>
-        <a class="express-quick-row" href="tel:+256794801689"><i class="fas fa-phone"></i><span class="express-quick-label">Phone Support</span><i class="fas fa-chevron-right express-quick-arrow"></i></a>
-      </div>
+
 
       <button class="express-logout-btn" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> <span>Sign Out</span></button>
 
@@ -678,6 +747,9 @@
         <button class="network-level-btn express-level-btn" data-level="1">L1 (<span class="filter-count" id="filterLevel1">0</span>)</button>
         <button class="network-level-btn express-level-btn" data-level="2">L2 (<span class="filter-count" id="filterLevel2">0</span>)</button>
         <button class="network-level-btn express-level-btn" data-level="3">L3 (<span class="filter-count" id="filterLevel3">0</span>)</button>
+        <button class="network-level-btn express-level-btn" data-level="4">L4 (<span class="filter-count" id="filterLevel1">0</span>)</button>
+        <button class="network-level-btn express-level-btn" data-level="5">L5 (<span class="filter-count" id="filterLevel2">0</span>)</button>
+        <button class="network-level-btn express-level-btn" data-level="6">L6 (<span class="filter-count" id="filterLevel3">0</span>)</button>
       </div>
 
       <div class="downline-container">

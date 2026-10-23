@@ -16,15 +16,15 @@ class BonusConfigHelper:
         1: Decimal('0.15'),   # 10%
         2: Decimal('0.01'),   # 5%
         3: Decimal('0.01'),   # 3%
-        4: Decimal('0.0'),   # 2%
-        5: Decimal('0.0'),   # 1%
+        4: Decimal('0.01'),   # 2%
+        5: Decimal('0.01'),   # 1%
         # Levels 6-20: 0.5% each
     }
     
     # Default percentage for levels 6-20
     DEFAULT_PERCENTAGE = Decimal('0.000')
     
-    MAX_LEVEL = 3
+    MAX_LEVEL = 5
     
     @staticmethod
     def get_bonus_percentage(level: int, package_id: int = None) -> Decimal:

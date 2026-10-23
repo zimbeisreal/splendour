@@ -378,40 +378,6 @@ body {
   color: var(--sky-muted);
 }
 
-.sky-social-icons {
-  display: flex;
-  gap: 10px;
-}
-
-.sky-social-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--sky-line);
-  color: var(--sky-soft);
-  font-size: 16px;
-  text-decoration: none;
-  transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.18s;
-}
-
-.sky-social-icon:hover {
-  transform: translateY(-2px) scale(1.05);
-}
-
-.sky-social-icon.sky-wa:hover {
-  background: rgba(37, 211, 102, 0.15);
-  border-color: rgba(37, 211, 102, 0.55);
-  color: #25D366;
-}
-
-.sky-social-icon.sky-tg:hover {
-  background: rgba(34, 158, 217, 0.15);
-  border-color: rgba(34, 158, 217, 0.55);
-  color: #2AABEE;
-}
 
 /* ------------------------------------------------------------
    LEGAL
@@ -486,4 +452,107 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+
+
+/* ============================================================
+   COMMUNITY — bright brand buttons with labels
+   ============================================================ */
+.sky-community {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--sky-line);
+  border-radius: var(--sky-r);
+  margin-top: 14px;
+}
+
+.sky-community-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--sky-muted);
+  text-align: center;
+}
+
+.sky-social-icons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sky-social-icon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: var(--sky-r-sm);
+  text-decoration: none;
+  font-family: var(--sky-font);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: var(--sky-white);
+  transition: transform var(--sky-dur-1) var(--sky-ease),
+              filter var(--sky-dur-2) var(--sky-ease),
+              box-shadow var(--sky-dur-2) var(--sky-ease);
+}
+
+.sky-social-icon:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.sky-social-icon:active {
+  transform: scale(0.98);
+}
+
+/* Bigger, brighter icon */
+.sky-social-icon > i:first-child {
+  font-size: 20px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+}
+
+.sky-social-text {
+  flex: 1;
+  text-align: left;
+}
+
+.sky-social-arrow {
+  font-size: 11px;
+  opacity: 0.75;
+  transition: transform var(--sky-dur-2) var(--sky-ease);
+}
+
+.sky-social-icon:hover .sky-social-arrow {
+  transform: translateX(3px);
+  opacity: 1;
+}
+
+/* WhatsApp — brand green */
+.sky-social-icon.sky-wa {
+  background: linear-gradient(120deg, #1EBE5D 0%, #25D366 100%);
+  box-shadow: 0 8px 20px -8px rgba(37, 211, 102, 0.6);
+}
+
+/* Telegram — brand blue */
+.sky-social-icon.sky-tg {
+  background: linear-gradient(120deg, #1E96D6 0%, #2AABEE 100%);
+  box-shadow: 0 8px 20px -8px rgba(42, 171, 238, 0.6);
+}
+
+.sky-social-icon.sky-wa:hover {
+  box-shadow: 0 12px 26px -8px rgba(37, 211, 102, 0.85);
+}
+
+.sky-social-icon.sky-tg:hover {
+  box-shadow: 0 12px 26px -8px rgba(42, 171, 238, 0.85);
 }
