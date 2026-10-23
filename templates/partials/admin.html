@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="">
+  <title>express Admin Dashboard</title>
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome 6 -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --sidebar-width: 280px;
+      --primary: #4361ee;
+      --primary-dark: #3a56d4;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --info: #3b82f6;
+      --dark: #1e293b;
+      --gray: #64748b;
+      --light: #f8fafc;
+      --border: #e2e8f0;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body { 
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--light);
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--gray); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--dark); }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed; top: 0; left: 0; height: 100vh; width: var(--sidebar-width);
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #94a3b8; z-index: 1040;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+      overflow-y: auto;
+    }
+    
+    .sidebar-brand { 
+      padding: 1.5rem; 
+      font-size: 1.3rem; 
+      font-weight: 700; 
+      color: white; 
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.03);
+    }
+    
+    .sidebar-brand i { color: var(--primary); }
+    
+    .nav-link { 
+      color: #94a3b8; 
+      padding: 0.75rem 1.2rem; 
+      margin: 0.2rem 0.8rem;
+      border-radius: 0.5rem; 
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .nav-link:hover, .nav-link.active { 
+      background: var(--primary); 
+      color: white; 
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
+    }
+    
+    .nav-link i { width: 20px; font-size: 1.1rem; }
+
+    /* Main Content */
+    .main-wrapper { margin-left: var(--sidebar-width); min-height: 100vh; display: flex; flex-direction: column; }
+    .top-bar { 
+      background: white; 
+      border-bottom: 1px solid var(--border); 
+      padding: 0.8rem 1.5rem; 
+      position: sticky; 
+      top: 0; 
+      z-index: 1030; 
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between;
+      backdrop-filter: blur(10px);
+    }
+    .content-area { padding: 1.5rem; flex: 1; }
+
+    /* Pages */
+    .page { display: none; animation: fadeIn 0.3s ease; }
+    .page.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Stats Cards */
+    .stat-card { 
+      background: white; 
+      border-radius: 1rem; 
+      padding: 1.2rem; 
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      border: 1px solid var(--border);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
+    .stat-card .icon { 
+      width: 48px; 
+      height: 48px; 
+      border-radius: 12px; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      font-size: 1.3rem;
+    }
+    .stat-value { font-size: 1.8rem; font-weight: 700; margin: 0.5rem 0 0; }
+    .stat-label { font-size: 0.85rem; color: var(--gray); margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Tables */
+    .table-container { 
+      background: white; 
+      border-radius: 1rem; 
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
+      border: 1px solid var(--border); 
+      overflow: hidden;
+    }
+    .table { margin-bottom: 0; }
+    .table th { background: #f8fafc; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray); }
+    .table td { vertical-align: middle; }
+
+    /* Badges */
+    .badge-active { background: #d1fae5; color: #065f46; }
+    .badge-inactive { background: #fee2e2; color: #991b1b; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-approved, .badge-completed { background: #d1fae5; color: #065f46; }
+    .badge-rejected, .badge-failed { background: #fee2e2; color: #991b1b; }
+    
+    /* Buttons */
+    .btn-sm { padding: 0.25rem 0.75rem; font-size: 0.75rem; }
+    .btn-action { margin: 0 2px; }
+    
+    /* Skeleton Loading */
+    .skeleton { background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; height: 20px; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    
+    /* Toast */
+    #toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1100; min-width: 300px; }
+    .custom-toast { border-radius: 0.75rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: slideIn 0.3s ease; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    
+    /* Modal */
+    .modal-content { border-radius: 1rem; border: none; }
+    .modal-header { border-bottom: 1px solid var(--border); background: #f8fafc; }
+    .modal-footer { border-top: 1px solid var(--border); }
+    
+    /* Charts */
+    .chart-container { background: white; border-radius: 1rem; padding: 1rem; border: 1px solid var(--border); }
+    
+    /* Empty State */
+    .empty-state { text-align: center; padding: 3rem; color: var(--gray); }
+    .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
+    
+    /* Responsive */
+    @media (max-width: 991.98px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.show { transform: translateX(0); }
+      .main-wrapper { margin-left: 0; }
+    }
+    
+    /* Stats Grid */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <i class="fa-solid fa-chart-line me-2"></i>
+      express Admin
+    </div>
+    <div class="mt-3">
+      <a href="#" class="nav-link active" data-page="dashboard">
+        <i class="fa-solid fa-tachometer-alt"></i> Dashboard
+      </a>
+      <a href="#" class="nav-link" data-page="users">
+        <i class="fa-solid fa-users"></i> Users
+      </a>
+      <a href="#" class="nav-link" data-page="withdrawals">
+        <i class="fa-solid fa-money-bill-transfer"></i> Withdrawals
+      </a>
+      <a href="#" class="nav-link" data-page="packages">
+        <i class="fa-solid fa-box"></i> Machines
+      </a>
+      <a href="#" class="nav-link" data-page="bonuses">
+        <i class="fa-solid fa-gift"></i> Bonuses
+      </a>
+      <a href="#" class="nav-link" data-page="logs">
+        <i class="fa-solid fa-history"></i> Audit Logs
+      </a>
+    </div>
+    <div class="mt-auto p-3 border-top" style="border-color: rgba(255,255,255,0.1) !important;">
+      <div class="d-flex align-items-center">
+        <div class="bg-primary rounded-circle text-white d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; font-weight: 700;">A</div>
+        <div class="ms-2">
+          <div class="text-white small fw-semibold">Admin Panel</div>
+          <div class="text-muted small" style="font-size: 0.7rem;">v2.0.0</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="main-wrapper">
+    <header class="top-bar">
+      <div>
+        <button class="btn btn-light btn-sm d-lg-none me-2" id="sidebar-toggle">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+        <h5 class="m-0 d-inline-block" id="page-title">Dashboard</h5>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-light btn-sm" id="refresh-btn" title="Refresh Data">
+          <i class="fa-solid fa-rotate"></i>
+        </button>
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="logout()">
+          <i class="fa-solid fa-right-from-bracket me-1"></i> Logout
+        </button>
+      </div>
+    </header>
+
+    <div class="content-area">
+      <!-- Dashboard Page -->
+      <section id="dashboard" class="page active">
+        <div class="stats-grid" id="stats-grid"></div>
+        
+        <div class="row g-3 mb-4">
+          <div class="col-lg-6">
+            <div class="chart-container">
+              <h6 class="fw-bold mb-3"><i class="fa-solid fa-chart-line me-2 text-primary"></i>User Growth (30 days)</h6>
+              <canvas id="userGrowthChart" height="250"></canvas>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="chart-container">
+              <h6 class="fw-bold mb-3"><i class="fa-solid fa-pie-chart me-2 text-success"></i>Machine Distribution</h6>
+              <canvas id="packageChart" height="250"></canvas>
+            </div>
+          </div>
+        </div>
+        
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <div class="table-container">
+              <div class="p-3 border-bottom">
+                <h6 class="fw-bold mb-0"><i class="fa-solid fa-user-plus me-2"></i>Recent Users</h6>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                  <thead><tr><th>ID</th><th>Username</th><th>Status</th><th>Joined</th></tr></thead>
+                  <tbody id="recent-users"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="table-container">
+              <div class="p-3 border-bottom">
+                <h6 class="fw-bold mb-0"><i class="fa-solid fa-money-bill-wave me-2 text-warning"></i>Recent Withdrawals</h6>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                  <thead><tr><th>ID</th><th>User</th><th>Amount</th><th>Status</th></tr></thead>
+                  <tbody id="recent-withdrawals"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Users Page -->
+      <section id="users" class="page">
+        <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+          <input type="text" id="user-search" class="form-control form-control-sm" style="width: 250px;" placeholder="Search by username, email, phone...">
+          <select id="user-filter" class="form-select form-select-sm" style="width: 130px;">
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="adminAPI.loadUsers(1)">
+            <i class="fa-solid fa-search me-1"></i> Search
+          </button>
+          <div class="ms-auto">
+            <button class="btn btn-success btn-sm" onclick="adminAPI.exportUsers()">
+              <i class="fa-solid fa-download me-1"></i> Export CSV
+            </button>
+          </div>
+        </div>
+        
+        <div class="table-container">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>ID</th><th>Username</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Verified</th><th>Balance</th><th>Joined</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="users-table"></tbody>
+            </table>
+          </div>
+        </div>
+        
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <span class="text-muted small" id="users-pagination-info"></span>
+          <nav><ul class="pagination pagination-sm mb-0" id="users-pagination"></ul></nav>
+        </div>
+      </section>
+
+      <!-- Withdrawals Page -->
+      <section id="withdrawals" class="page">
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <select id="wdl-filter" class="form-select form-select-sm" style="width: 150px;">
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="all">All</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="adminAPI.loadWithdrawals(1)">
+            <i class="fa-solid fa-filter me-1"></i> Apply Filter
+          </button>
+          <div class="ms-auto">
+            <button class="btn btn-success btn-sm" onclick="adminAPI.exportWithdrawals()">
+              <i class="fa-solid fa-download me-1"></i> Export CSV
+            </button>
+          </div>
+        </div>
+        
+        <div class="table-container">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>ID</th><th>User</th><th>Amount</th><th>Fee</th><th>Net Amount</th><th>Phone</th><th>Status</th><th>Date</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="withdrawals-table"></tbody>
+            </table>
+          </div>
+        </div>
+        
+        <nav class="mt-3"><ul class="pagination pagination-sm justify-content-center" id="withdrawals-pagination"></ul></nav>
+      </section>
+
+      <!-- Packages Page -->
+      <section id="packages" class="page">
+        <div class="d-flex gap-2 mb-3">
+          <select id="package-filter" class="form-select form-select-sm" style="width: 150px;">
+            <option value="active">Active</option>
+            <option value="completed">Completed</option>
+            <option value="expired">Expired</option>
+            <option value="all">All</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="adminAPI.loadPackages(1)">
+            <i class="fa-solid fa-filter me-1"></i> Filter
+          </button>
+        </div>
+        
+        <div class="stats-grid mb-3" id="package-stats"></div>
+        
+        <div class="table-container">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>ID</th><th>User</th><th>Package</th><th>Amount</th><th>Status</th><th>Activated</th><th>Expires</th><th>Days Left</th>
+                </tr>
+              </thead>
+              <tbody id="packages-table"></tbody>
+            </table>
+          </div>
+        </div>
+        
+        <nav class="mt-3"><ul class="pagination pagination-sm justify-content-center" id="packages-pagination"></ul></nav>
+      </section>
+
+      <!-- Bonuses Page -->
+      <section id="bonuses" class="page">
+        <div class="d-flex gap-2 mb-3">
+          <select id="bonus-filter" class="form-select form-select-sm" style="width: 150px;">
+            <option value="pending">Pending</option>
+            <option value="paid">Paid</option>
+            <option value="all">All</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="adminAPI.loadBonuses(1)">
+            <i class="fa-solid fa-filter me-1"></i> Filter
+          </button>
+        </div>
+        
+        <div class="stats-grid mb-3" id="bonus-stats"></div>
+        
+        <div class="table-container">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>ID</th><th>User</th><th>Amount</th><th>Type</th><th>Status</th><th>Created</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="bonuses-table"></tbody>
+            </table>
+          </div>
+        </div>
+        
+        <nav class="mt-3"><ul class="pagination pagination-sm justify-content-center" id="bonuses-pagination"></ul></nav>
+      </section>
+
+      <!-- Audit Logs Page -->
+      <section id="logs" class="page">
+        <div class="d-flex gap-2 mb-3">
+          <input type="text" id="log-search" class="form-control form-control-sm" style="width: 250px;" placeholder="Search actions...">
+          <button class="btn btn-primary btn-sm" onclick="adminAPI.loadLogs(1)">
+            <i class="fa-solid fa-search me-1"></i> Search
+          </button>
+        </div>
+        
+        <div class="table-container">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>ID</th><th>Admin</th><th>Action</th><th>Target</th><th>Changes</th><th>IP Address</th><th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody id="logs-table"></tbody>
+            </table>
+          </div>
+        </div>
+        
+        <nav class="mt-3"><ul class="pagination pagination-sm justify-content-center" id="logs-pagination"></ul></nav>
+      </section>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div class="modal fade" id="confirmModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title" id="confirmTitle">Confirm Action</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="confirmMessage">Are you sure you want to perform this action?</div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-sm btn-primary" id="confirmBtn">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // ===========================================================
+    // COMPLETE ADMIN DASHBOARD - PRODUCTION READY
+    // ===========================================================
+    
+    'use strict';
+
+    // Configuration
+    const CONFIG = {
+      API_BASE: '/admin/api',
+      TIMEOUT: 50000,
+      RETRIES: 5
+    };
+
+    // State Management
+    const state = {
+      usersPage: 1,
+      withdrawalsPage: 1,
+      packagesPage: 1,
+      bonusesPage: 1,
+      logsPage: 1,
+      userGrowthChart: null,
+      packageChart: null
+    };
+
+    // ===========================================================
+    // UTILITY FUNCTIONS
+    // ===========================================================
+    
+    function formatCurrency(amount) {
+      return new Intl.NumberFormat('en-US', { 
+        style: 'currency', 
+        currency: 'UGX',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(amount || 0);
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return '—';
+      const date = new Date(dateString);
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatDateShort(dateString) {
+      if (!dateString) return '—';
+      const date = new Date(dateString);
+      return date.toLocaleDateString();
+    }
+
+    function getStatusBadge(status) {
+      const badges = {
+        'active': 'badge-active',
+        'inactive': 'badge-inactive',
+        'pending': 'badge-pending',
+        'approved': 'badge-approved',
+        'rejected': 'badge-rejected',
+        'completed': 'badge-approved',
+        'paid': 'badge-approved',
+        'expired': 'badge-inactive'
+      };
+      return badges[status] || 'badge-pending';
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `custom-toast alert alert-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} alert-dismissible fade show mb-2`;
+      toast.innerHTML = `
+        <div class="d-flex align-items-center">
+          <i class="fa-solid ${type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'} me-2"></i>
+          <div>${message}</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    function showConfirm(title, message, onConfirm) {
+      const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+      document.getElementById('confirmTitle').textContent = title;
+      document.getElementById('confirmMessage').textContent = message;
+      const confirmBtn = document.getElementById('confirmBtn');
+      const oldHandler = confirmBtn.onclick;
+      confirmBtn.onclick = () => {
+        modal.hide();
+        onConfirm();
+      };
+      modal.show();
+      document.getElementById('confirmModal').addEventListener('hidden.bs.modal', () => {
+        confirmBtn.onclick = oldHandler;
+      }, { once: true });
+    }
+
+    function showLoading(elementId, rows = 5) {
+      const tbody = document.getElementById(elementId);
+      if (!tbody) return;
+      tbody.innerHTML = Array(rows).fill(`
+        <tr><td colspan="10"><div class="skeleton" style="height: 40px;"></div></td></tr>
+      `).join('');
+    }
+
+    function showEmpty(elementId, message = 'No data available') {
+      const tbody = document.getElementById(elementId);
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">${message}</td></tr>`;
+      }
+    }
+
+    // ===========================================================
+    // API SERVICE LAYER
+    // ===========================================================
+    
+    const api = {
+      async request(endpoint, options = {}) {
+        const url = `${CONFIG.API_BASE}${endpoint}`;
+        let lastError;
+        
+        for (let i = 0; i <= CONFIG.RETRIES; i++) {
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), CONFIG.TIMEOUT);
+            
+            const response = await fetch(url, {
+              ...options,
+              signal: controller.signal,
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                ...options.headers
+              }
+            });
+            
+            clearTimeout(timeout);
+            
+            if (!response.ok) {
+              const error = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
+              throw new Error(error.message || error.error || `Request failed`);
+            }
+            
+            return await response.json();
+          } catch (error) {
+            lastError = error;
+            if (i < CONFIG.RETRIES) {
+              await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+            }
+          }
+        }
+        
+        throw lastError;
+      },
+      
+      get(endpoint) { return this.request(endpoint, { method: 'GET' }); },
+      post(endpoint, data) { return this.request(endpoint, { method: 'POST', body: JSON.stringify(data) }); }
+    };
+
+    // ===========================================================
+    // ADMIN API ACTIONS
+    // ===========================================================
+    
+    const adminAPI = {
+      // Dashboard
+      async loadDashboard() {
+        showLoading('recent-users', 3);
+        showLoading('recent-withdrawals', 3);
+        
+        try {
+          const [stats, users, withdrawals] = await Promise.all([
+            api.get('/stats'),
+            api.get('/users/recent?limit=5'),
+            api.get('/withdrawals/recent?limit=5')
+          ]);
+          
+          this.renderStats(stats);
+          this.renderRecentUsers(users);
+          this.renderRecentWithdrawals(withdrawals);
+          this.loadCharts();
+          
+        } catch (error) {
+          showToast('Failed to load dashboard: ' + error.message, 'error');
+        }
+      },
+      
+      renderStats(stats) {
+        const grid = document.getElementById('stats-grid');
+        grid.innerHTML = `
+          <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div><div class="stat-value">${stats.total_users || 0}</div><div class="stat-label">Total Users</div></div>
+              <div class="icon bg-primary bg-opacity-10 text-primary"><i class="fa-solid fa-users"></i></div>
+            </div>
+            <div class="mt-2"><small class="text-muted">+${stats.today_users || 0} today</small></div>
+          </div>
+          <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div><div class="stat-value">${stats.pending_users || 0}</div><div class="stat-label">Pending Verification</div></div>
+              <div class="icon bg-warning bg-opacity-10 text-warning"><i class="fa-solid fa-clock"></i></div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div><div class="stat-value">${stats.active_packages || 0}</div><div class="stat-label">Active Packages</div></div>
+              <div class="icon bg-success bg-opacity-10 text-success"><i class="fa-solid fa-box"></i></div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div><div class="stat-value">${stats.pending_withdrawals || 0}</div><div class="stat-label">Pending Withdrawals</div></div>
+              <div class="icon bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-money-bill-wave"></i></div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div><div class="stat-value">${formatCurrency(stats.total_volume)}</div><div class="stat-label">Total Volume</div></div>
+              <div class="icon bg-info bg-opacity-10 text-info"><i class="fa-solid fa-chart-line"></i></div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+              <div><div class="stat-value">${formatCurrency(stats.total_bonus_paid)}</div><div class="stat-label">Bonus Paid</div></div>
+              <div class="icon bg-purple bg-opacity-10 text-purple"><i class="fa-solid fa-gift"></i></div>
+            </div>
+          </div>
+        `;
+      },
+      
+      renderRecentUsers(users) {
+        const tbody = document.getElementById('recent-users');
+        if (!users?.length) { showEmpty('recent-users'); return; }
+        
+        tbody.innerHTML = users.map(u => `
+          <tr>
+            <td>#${u.id}</td>
+            <td><span class="fw-semibold">${escapeHtml(u.username)}</span></td>
+            <td><span class="badge ${u.is_active ? 'badge-active' : 'badge-inactive'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td>${formatDateShort(u.created_at)}</td>
+          </tr>
+        `).join('');
+      },
+      
+      renderRecentWithdrawals(withdrawals) {
+        const tbody = document.getElementById('recent-withdrawals');
+        if (!withdrawals?.length) { showEmpty('recent-withdrawals'); return; }
+        
+        tbody.innerHTML = withdrawals.map(w => `
+          <tr>
+            <td>#${w.id}</td>
+            <td>${escapeHtml(w.user?.username || 'N/A')}</td>
+            <td class="fw-semibold">${formatCurrency(w.amount)}</td>
+            <td><span class="badge ${getStatusBadge(w.status)}">${w.status}</span></td>
+          </tr>
+        `).join('');
+      },
+      
+      async loadCharts() {
+        try {
+          const growth = await api.get('/stats/growth?days=30');
+          if (growth?.labels && growth?.data) {
+            if (state.userGrowthChart) state.userGrowthChart.destroy();
+            const ctx = document.getElementById('userGrowthChart').getContext('2d');
+            state.userGrowthChart = new Chart(ctx, {
+              type: 'line',
+              data: { labels: growth.labels, datasets: [{ label: 'New Users', data: growth.data, borderColor: '#4361ee', backgroundColor: 'rgba(67,97,238,0.1)', fill: true, tension: 0.4 }] },
+              options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'top' } } }
+            });
+          }
+          
+          const packages = await api.get('/packages/stats');
+          if (packages?.labels && packages?.data) {
+            if (state.packageChart) state.packageChart.destroy();
+            const ctx = document.getElementById('packageChart').getContext('2d');
+            state.packageChart = new Chart(ctx, {
+              type: 'doughnut',
+              data: { labels: packages.labels, datasets: [{ data: packages.data, backgroundColor: ['#4361ee', '#10b981', '#f59e0b', '#ef4444'] }] },
+              options: { responsive: true, maintainAspectRatio: true }
+            });
+          }
+        } catch (error) {
+          console.error('Chart loading error:', error);
+        }
+      },
+      
+      // Users
+      async loadUsers(page = 1) {
+        showLoading('users-table', 10);
+        state.usersPage = page;
+        
+        const search = document.getElementById('user-search')?.value || '';
+        const status = document.getElementById('user-filter')?.value || 'all';
+        
+        try {
+          const res = await api.get(`/users?page=${page}&search=${encodeURIComponent(search)}&status=${status}`);
+          
+          document.getElementById('users-pagination-info').textContent = `Showing page ${res.page} of ${res.pages} • ${res.total} total users`;
+          this.renderUsersTable(res.items);
+          this.renderPagination('users-pagination', res.page, res.pages, (p) => this.loadUsers(p));
+          
+        } catch (error) {
+          showToast('Failed to load users: ' + error.message, 'error');
+          showEmpty('users-table');
+        }
+      },
+      
+      renderUsersTable(users) {
+        const tbody = document.getElementById('users-table');
+        if (!users?.length) { showEmpty('users-table'); return; }
+        
+        tbody.innerHTML = users.map(u => `
+          <tr>
+            <td>#${u.id}</td><td><div class="fw-semibold">${escapeHtml(u.username)}</div><small class="text-muted">${escapeHtml(u.email || '')}</small></td>
+            <td>${escapeHtml(u.phone || '—')}</td><td><span class="badge ${u.role === 'admin' ? 'badge-approved' : 'badge-pending'}">${u.role || 'user'}</span></td>
+            <td><span class="badge ${u.is_active ? 'badge-active' : 'badge-inactive'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td><span class="badge ${u.is_verified ? 'badge-active' : 'badge-pending'}">${u.is_verified ? 'Verified' : 'Pending'}</span></td>
+            <td>${formatCurrency(u.actual_balance)}</td><td>${formatDateShort(u.created_at)}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary btn-action" onclick="adminAPI.viewUser(${u.id})" title="View"><i class="fa-solid fa-eye"></i></button>
+              <button class="btn btn-sm btn-outline-${u.is_active ? 'danger' : 'success'} btn-action" onclick="adminAPI.toggleUserStatus(${u.id}, ${u.is_active})" title="${u.is_active ? 'Disable' : 'Enable'}"><i class="fa-solid fa-power-off"></i></button>
+              ${!u.is_verified ? `<button class="btn btn-sm btn-outline-success btn-action" onclick="adminAPI.verifyUser(${u.id})" title="Verify"><i class="fa-solid fa-check-circle"></i></button>` : ''}
+              <button class="btn btn-sm btn-outline-warning btn-action" onclick="adminAPI.changeUserRole(${u.id}, '${u.role}')" title="Change Role"><i class="fa-solid fa-tag"></i></button>
+            </td>
+          </tr>
+        `).join('');
+      },
+      
+      async toggleUserStatus(userId, currentStatus) {
+        showConfirm('Toggle User Status', `Are you sure you want to ${currentStatus ? 'disable' : 'enable'} this user?`, async () => {
+          try {
+            await api.post(`/users/${userId}/toggle-status`);
+            showToast(`User ${currentStatus ? 'disabled' : 'enabled'} successfully`, 'success');
+            this.loadUsers(state.usersPage);
+          } catch (error) {
+            showToast(error.message, 'error');
+          }
+        });
+      },
+      
+      async verifyUser(userId) {
+        showConfirm('Verify User', 'Are you sure you want to verify this user?', async () => {
+          try {
+            await api.post(`/users/${userId}/verify`);
+            showToast('User verified successfully', 'success');
+            this.loadUsers(state.usersPage);
+          } catch (error) {
+            showToast(error.message, 'error');
+          }
+        });
+      },
+      
+      async changeUserRole(userId, currentRole) {
+        const newRole = currentRole === 'admin' ? 'user' : 'admin';
+        showConfirm('Change User Role', `Change user role from ${currentRole} to ${newRole}?`, async () => {
+          try {
+            await api.post(`/users/${userId}/role`, { role: newRole });
+            showToast(`Role changed to ${newRole}`, 'success');
+            this.loadUsers(state.usersPage);
+          } catch (error) {
+            showToast(error.message, 'error');
+          }
+        });
+      },
+      
+      viewUser(userId) {
+        window.location.href = `/admin/users/${userId}`;
+      },
+      
+      async exportUsers() {
+        try {
+          window.open('/admin/api/export/users', '_blank');
+          showToast('Export started', 'success');
+        } catch (error) {
+          showToast('Export failed', 'error');
+        }
+      },
+      
+      // Withdrawals
+      async loadWithdrawals(page = 1) {
+        showLoading('withdrawals-table', 10);
+        state.withdrawalsPage = page;
+        
+        const status = document.getElementById('wdl-filter')?.value || 'pending';
+        
+        try {
+          const res = await api.get(`/withdrawals?page=${page}&status=${status}`);
+          this.renderWithdrawalsTable(res.items);
+          this.renderPagination('withdrawals-pagination', res.page, res.pages, (p) => this.loadWithdrawals(p));
+          
+        } catch (error) {
+          showToast('Failed to load withdrawals: ' + error.message, 'error');
+          showEmpty('withdrawals-table');
+        }
+      },
+      
+      renderWithdrawalsTable(withdrawals) {
+        const tbody = document.getElementById('withdrawals-table');
+        if (!withdrawals?.length) { showEmpty('withdrawals-table'); return; }
+        
+        tbody.innerHTML = withdrawals.map(w => `
+          <tr>
+            <td>#${w.id}</td><td>${escapeHtml(w.user?.username || 'N/A')}</td>
+            <td class="fw-semibold">${formatCurrency(w.amount)}</td>
+            <td>${formatCurrency(w.fee || 0)}</td>
+            <td>${formatCurrency(w.net_amount || w.amount)}</td>
+            <td>${escapeHtml(w.phone || '—')}</td>
+            <td><span class="badge ${getStatusBadge(w.status)}">${w.status}</span></td>
+            <td>${formatDateShort(w.created_at)}</td>
+            <td>
+              ${w.status === 'pending' ? `
+                <button class="btn btn-sm btn-success btn-action" onclick="adminAPI.approveWithdrawal(${w.id})" title="Approve"><i class="fa-solid fa-check"></i></button>
+                <button class="btn btn-sm btn-danger btn-action" onclick="adminAPI.rejectWithdrawal(${w.id})" title="Reject"><i class="fa-solid fa-times"></i></button>
+              ` : '<span class="text-muted small">Processed</span>'}
+            </td>
+          </tr>
+        `).join('');
+      },
+      
+      async approveWithdrawal(withdrawalId) {
+        showConfirm('Approve Withdrawal', 'Are you sure you want to approve this withdrawal request?', async () => {
+          try {
+            await api.post(`/withdrawals/${withdrawalId}/approve`);
+            showToast('Withdrawal approved successfully', 'success');
+            this.loadWithdrawals(state.withdrawalsPage);
+          } catch (error) {
+            showToast(error.message, 'error');
+          }
+        });
+      },
+      
+      async rejectWithdrawal(withdrawalId) {
+        const reason = prompt('Enter rejection reason (optional):');
+        showConfirm('Reject Withdrawal', 'Are you sure you want to reject this withdrawal?', async () => {
+          try {
+            await api.post(`/withdrawals/${withdrawalId}/reject`, { reason: reason || 'No reason provided' });
+            showToast('Withdrawal rejected', 'success');
+            this.loadWithdrawals(state.withdrawalsPage);
+          } catch (error) {
+            showToast(error.message, 'error');
+          }
+        });
+      },
+      
+      async exportWithdrawals() {
+        window.open('/admin/api/export/withdrawals', '_blank');
+        showToast('Export started', 'success');
+      },
+      
+      // Packages
+      async loadPackages(page = 1) {
+        showLoading('packages-table', 10);
+        state.packagesPage = page;
+        
+        const status = document.getElementById('package-filter')?.value || 'active';
+        
+        try {
+          const res = await api.get(`/packages?page=${page}&status=${status}`);
+          this.renderPackagesStats(res);
+          this.renderPackagesTable(res.items);
+          this.renderPagination('packages-pagination', res.page, res.pages, (p) => this.loadPackages(p));
+          
+        } catch (error) {
+          showToast('Failed to load packages: ' + error.message, 'error');
+          showEmpty('packages-table');
+        }
+      },
+      
+      renderPackagesStats(res) {
+        const statsDiv = document.getElementById('package-stats');
+        if (statsDiv) {
+          statsDiv.innerHTML = `
+            <div class="stat-card"><div class="stat-value">${res.total_count || 0}</div><div class="stat-label">Total Packages</div></div>
+            <div class="stat-card"><div class="stat-value">${res.active_count || 0}</div><div class="stat-label">Active</div></div>
+            <div class="stat-card"><div class="stat-value">${formatCurrency(res.total_value)}</div><div class="stat-label">Total Value</div></div>
+          `;
+        }
+      },
+      
+      renderPackagesTable(packages) {
+        const tbody = document.getElementById('packages-table');
+        if (!packages?.length) { showEmpty('packages-table'); return; }
+        
+        tbody.innerHTML = packages.map(p => {
+          const daysLeft = p.expires_at ? Math.ceil((new Date(p.expires_at) - new Date()) / (1000 * 60 * 60 * 24)) : 0;
+          return `
+            <tr>
+              <td>#${p.id}</td>
+              <td>${escapeHtml(p.user?.username || 'N/A')}</td>
+              <td>${escapeHtml(p.package || p.catalog?.name || '—')}</td>
+              <td class="fw-semibold">${formatCurrency(p.package_amount)}</td>
+              <td><span class="badge ${getStatusBadge(p.status)}">${p.status}</span></td>
+              <td>${formatDateShort(p.activated_at)}</td>
+              <td>${formatDateShort(p.expires_at)}</td>
+              <td>${daysLeft > 0 ? daysLeft + ' days' : 'Expired'}</td>
+            </tr>
+          `;
+        }).join('');
+      },
+      
+      // Bonuses
+      async loadBonuses(page = 1) {
+        showLoading('bonuses-table', 10);
+        state.bonusesPage = page;
+        
+        const status = document.getElementById('bonus-filter')?.value || 'pending';
+        
+        try {
+          const res = await api.get(`/bonuses?page=${page}&status=${status}`);
+          this.renderBonusesStats(res);
+          this.renderBonusesTable(res.items);
+          this.renderPagination('bonuses-pagination', res.page, res.pages, (p) => this.loadBonuses(p));
+          
+        } catch (error) {
+          showToast('Failed to load bonuses: ' + error.message, 'error');
+          showEmpty('bonuses-table');
+        }
+      },
+      
+      renderBonusesStats(res) {
+        const statsDiv = document.getElementById('bonus-stats');
+        if (statsDiv) {
+          statsDiv.innerHTML = `
+            <div class="stat-card"><div class="stat-value">${formatCurrency(res.pending_total)}</div><div class="stat-label">Pending Total</div></div>
+            <div class="stat-card"><div class="stat-value">${res.pending_count || 0}</div><div class="stat-label">Pending Count</div></div>
+            <div class="stat-card"><div class="stat-value">${formatCurrency(res.paid_total)}</div><div class="stat-label">Paid Total</div></div>
+          `;
+        }
+      },
+      
+      renderBonusesTable(bonuses) {
+        const tbody = document.getElementById('bonuses-table');
+        if (!bonuses?.length) { showEmpty('bonuses-table'); return; }
+        
+        tbody.innerHTML = bonuses.map(b => `
+          <tr>
+            <td>#${b.id}</td>
+            <td>${escapeHtml(b.user?.username || 'N/A')}</td>
+            <td class="fw-semibold">${formatCurrency(b.amount)}</td>
+            <td><span class="badge badge-info">${b.type || 'daily'}</span></td>
+            <td><span class="badge ${getStatusBadge(b.status)}">${b.status}</span></td>
+            <td>${formatDateShort(b.created_at)}</td>
+            <td>
+              ${b.status === 'pending' ? `
+                <button class="btn btn-sm btn-success" onclick="adminAPI.releaseBonus(${b.id})">Release</button>
+              ` : '<span class="text-muted small">Released</span>'}
+            </td>
+          </tr>
+        `).join('');
+      },
+      
+      async releaseBonus(bonusId) {
+        showConfirm('Release Bonus', 'Are you sure you want to release this bonus?', async () => {
+          try {
+            await api.post(`/bonuses/${bonusId}/release`);
+            showToast('Bonus released successfully', 'success');
+            this.loadBonuses(state.bonusesPage);
+          } catch (error) {
+            showToast(error.message, 'error');
+          }
+        });
+      },
+      
+      // Audit Logs
+      async loadLogs(page = 1) {
+        showLoading('logs-table', 10);
+        state.logsPage = page;
+        
+        const search = document.getElementById('log-search')?.value || '';
+        
+        try {
+          const res = await api.get(`/logs?page=${page}&search=${encodeURIComponent(search)}`);
+          this.renderLogsTable(res.items);
+          this.renderPagination('logs-pagination', res.page, res.pages, (p) => this.loadLogs(p));
+          
+        } catch (error) {
+          showToast('Failed to load logs: ' + error.message, 'error');
+          showEmpty('logs-table');
+        }
+      },
+      
+      renderLogsTable(logs) {
+        const tbody = document.getElementById('logs-table');
+        if (!logs?.length) { showEmpty('logs-table'); return; }
+        
+        tbody.innerHTML = logs.map(l => `
+          <tr>
+            <td>#${l.id}</td>
+            <td>${escapeHtml(l.admin_username || 'System')}</td>
+            <td><span class="badge badge-info">${escapeHtml(l.action_type)}</span></td>
+            <td>${escapeHtml(l.target_type)} #${l.target_id}</td>
+            <td><small>${escapeHtml(l.old_value)} → ${escapeHtml(l.new_value)}</small></td>
+            <td>${escapeHtml(l.ip_address || '—')}</td>
+            <td>${formatDate(l.created_at)}</td>
+          </tr>
+        `).join('');
+      },
+      
+      // Pagination Helper
+      renderPagination(containerId, current, total, callback) {
+        const container = document.getElementById(containerId);
+        if (!container || total <= 1) { if (container) container.innerHTML = ''; return; }
+        
+        let html = '';
+        html += `<li class="page-item ${current === 1 ? 'disabled' : ''}"><button class="page-link" data-page="${current - 1}"><i class="fa-solid fa-chevron-left"></i></button></li>`;
+        
+        for (let i = 1; i <= Math.min(total, 5); i++) {
+          html += `<li class="page-item ${i === current ? 'active' : ''}"><button class="page-link" data-page="${i}">${i}</button></li>`;
+        }
+        
+        if (total > 5) {
+          html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+          html += `<li class="page-item ${current === total ? 'disabled' : ''}"><button class="page-link" data-page="${total}">${total}</button></li>`;
+        }
+        
+        html += `<li class="page-item ${current === total ? 'disabled' : ''}"><button class="page-link" data-page="${current + 1}"><i class="fa-solid fa-chevron-right"></i></button></li>`;
+        
+        container.innerHTML = html;
+        container.querySelectorAll('button').forEach(btn => {
+          btn.addEventListener('click', () => callback(parseInt(btn.dataset.page)));
+        });
+      }
+    };
+
+    // ===========================================================
+    // ROUTING & NAVIGATION
+    // ===========================================================
+    
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+  function logout() {
+    if (confirm('Are you sure you want to logout?')) {
+        window.location.href = '/';
+    }
+}
+    
+    function navigateTo(page) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+      document.getElementById(page)?.classList.add('active');
+      document.querySelector(`[data-page="${page}"]`)?.classList.add('active');
+      
+      const titles = { dashboard: 'Dashboard', users: 'Users', withdrawals: 'Withdrawals', packages: 'Packages', bonuses: 'Bonuses', logs: 'Audit Logs' };
+      document.getElementById('page-title').textContent = titles[page] || 'Dashboard';
+      
+      // Load page data
+      switch(page) {
+        case 'dashboard': adminAPI.loadDashboard(); break;
+        case 'users': adminAPI.loadUsers(1); break;
+        case 'withdrawals': adminAPI.loadWithdrawals(1); break;
+        case 'packages': adminAPI.loadPackages(1); break;
+        case 'bonuses': adminAPI.loadBonuses(1); break;
+        case 'logs': adminAPI.loadLogs(1); break;
+      }
+    }
+    
+    // ===========================================================
+    // INITIALIZATION
+    // ===========================================================
+    
+    document.addEventListener('DOMContentLoaded', () => {
+      // Navigation
+      document.querySelectorAll('[data-page]').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          navigateTo(link.dataset.page);
+          if (window.innerWidth < 992) document.getElementById('sidebar').classList.remove('show');
+        });
+      });
+      
+      // Sidebar toggle for mobile
+      document.getElementById('sidebar-toggle')?.addEventListener('click', () => {
+        document.getElementById('sidebar').classList.toggle('show');
+      });
+      
+      // Refresh button
+      document.getElementById('refresh-btn')?.addEventListener('click', () => {
+        const activePage = document.querySelector('.page.active')?.id || 'dashboard';
+        navigateTo(activePage);
+        showToast('Data refreshed', 'success');
+      });
+      
+      // Search on enter
+      document.getElementById('user-search')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') adminAPI.loadUsers(1);
+      });
+      
+      document.getElementById('log-search')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') adminAPI.loadLogs(1);
+      });
+      
+      // Filter change
+      document.getElementById('user-filter')?.addEventListener('change', () => adminAPI.loadUsers(1));
+      document.getElementById('wdl-filter')?.addEventListener('change', () => adminAPI.loadWithdrawals(1));
+      document.getElementById('package-filter')?.addEventListener('change', () => adminAPI.loadPackages(1));
+      document.getElementById('bonus-filter')?.addEventListener('change', () => adminAPI.loadBonuses(1));
+      
+      // Load initial dashboard
+      adminAPI.loadDashboard();
+    });
+    
+    // Expose globally
+    window.adminAPI = adminAPI;
+    window.navigateTo = navigateTo;
+    window.logout = logout;
+    window.formatCurrency = formatCurrency;
+  </script>
+</body>
+</html>

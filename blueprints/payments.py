@@ -1,0 +1,6204 @@
+# ======================================================================================================
+#   PAYMENT API BLUEPRINT FOR MARZ PAYMENT GATEWAY INTEGRATION
+#   express - With Locking Support
+# =====================================================================================================
+
+from flask import Blueprint, request, jsonify, current_app, session, url_for, redirect
+import uuid
+from models import Payment, PaymentStatus, User, Withdrawal, PackageCatalog, User, Package, Referral, Bonus, ReferralBonus
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+import re
+import json
+from sqlalchemy import and_
+import requests
+from extensions import db
+import os
+from datetime import datetime, timedelta, timezone
+import base64
+import logging
+import uuid
+from decimal import Decimal
+from blueprints.payments_helpers import express_PACKAGE_CATALOG
+import sys
+from flask import Blueprint, request, jsonify, session, Blueprint, current_app
+from blueprints.payments_helpers import (
+    validate_payment_input, 
+    handle_existing_payment,
+    create_payment_record, 
+    send_to_pesajet,
+    create_user_package,
+    get_lock_bonus,
+    calculate_locked_returns
+)
+from blueprints.withdraw_helpers import WithdrawalProcessor, WithdrawalException, WithdrawalQueryHelper, WithdrawalConfig, WithdrawalRecordManager
+from blueprints.payments_helpers import check_package_funds_availability
+from models import Transaction, Notification, WebhookEvent
+from decimal import Decimal
+
+import hmac, hashlib
+
+
+
+
+bp = Blueprint("payments", __name__)
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+# =============================================================================================
+#      PAYMENT INITIATION ENDPOINT - express ONLY
+# =============================================================================================
+
+@bp.route("/payments/initiate", methods=['POST'])
+def initiate_payment():
+    """Main payment initiation endpoint - express package purchases with locking support"""
+    
+    try:
+        # 1. Authentication & Validation
+        user = get_authenticated_user()
+        if not user:
+            return jsonify({"error": "Unauthorized"}), 401
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid JSON"}), 400
+        
+        print("=" * 60)
+        print("📥 RECEIVED PAYMENT DATA:")
+        print(json.dumps(data, indent=2))
+        print("=" * 60)
+        
+        # 2. Validate input (includes lock validation)
+        validated, error = validate_payment_input(data)
+        if error:
+            return error
+        if validated["payment_type"] == 'deposit':
+            return handle_deposit_payment(user, validated)
+        # 3. Route to package payment handler only
+        if validated["payment_type"] == "package":
+            return handle_package_payment(user, validated)
+        else:
+            return jsonify({"error": "Invalid payment type. Only 'package' is supported."}), 400
+            
+    except KeyError as e:
+        print(f"KeyError: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Missing required field: {e}"}), 400
+    except Exception as e:
+        db.session.rollback()
+        print(f"Payment initiation error: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Payment processing failed"}), 500
+
+
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+def get_authenticated_user():
+    """Get authenticated user from session"""
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+    return User.query.get(user_id)
+
+
+def user_has_any_package(user_id: int) -> bool:
+    """Check if user has ever purchased any package"""
+    from models import Package
+    return Package.query.filter_by(user_id=user_id).first() is not None
+
+
+# ============================================================
+# PACKAGE PAYMENT HANDLER - WITH LOCKING SUPPORT
+# ============================================================
+
+def handle_package_payment(user, validated):
+    """
+    Handle express package purchase with locking support.
+    Routes to internal balance or external MarzPay based on funds availability.
+    """
+    amount = validated["amount"]
+    phone = validated["phone"]
+    package_obj = validated.get("package_obj")
+    catalog = validated.get("catalog")
+    product = validated.get("product")
+    lock_days = validated.get("lock_days", 0)
+    is_locking = validated.get("is_locking", False)
+    lock_details = validated.get("lock_details")
+    
+    if not package_obj:
+        return jsonify({"error": "Package not found"}), 400
+    
+    print("=" * 60)
+    print("📦 PACKAGE PAYMENT REQUEST")
+    print(f"Product: {product}")
+    print(f"Amount: {amount}")
+    print(f"Locking: {is_locking}")
+    print(f"Lock Days: {lock_days}")
+    if lock_details:
+        print(f"Lock Details: {lock_details}")
+    print("=" * 60)
+    
+    # Check if user has sufficient balance (actual + wallet)
+    has_funds, funds_msg, total_available = check_package_funds_availability(
+        user.id, Decimal(str(package_obj.amount))
+    )
+    
+    if has_funds:
+        return process_internal_package_payment(
+            user, package_obj, lock_days, is_locking, lock_details
+        )
+    else:
+        return process_external_package_payment(
+            user, amount, phone, package_obj, lock_days, is_locking, lock_details
+        )
+
+
+def handle_deposit_payment(user, validated):
+    """Handle mobile money deposit"""
+    amount = validated["amount"]
+    phone = validated["phone"]
+    
+    # Check for existing payment
+    existing_response = handle_existing_payment(user, amount, "deposit")
+    if existing_response:
+        return existing_response
+    
+    # Create payment record
+    payment = create_payment_record(user, amount, phone, "deposit")
+    if not payment:
+        return jsonify({"error": "Failed to create payment record"}), 500
+    
+    # Call MarzPay mobile money API
+    marz_data, error = send_to_pesajet(payment, phone, amount, package=None,
+            lock_details=None)
+    if error:
+        payment.status = PaymentStatus.FAILED.value
+        db.session.commit()
+        return jsonify(error), 502
+    
+    db.session.commit()
+    
+    return jsonify({
+        "reference": payment.reference,
+        "status": payment.status,
+        "payment_type": "deposit",
+        "checkout_url": marz_data.get("pop_up_info"),
+        "message": "Deposit initiated successfully"
+    }), 200
+# ============================================================
+# INTERNAL PACKAGE PAYMENT - WITH LOCKING SUPPORT
+# ============================================================
+def process_internal_package_payment(user, package_obj, lock_days=0, is_locking=False, lock_details=None):
+    """
+    Process package purchase using internal account balance (actual + wallet)
+    with locking support.
+    """
+    logging.info("=== PROCESSING INTERNAL PACKAGE PAYMENT ===")
+    
+    from models import Transaction, Notification
+    from decimal import Decimal
+    import uuid
+    import json
+    
+    amount = Decimal(str(package_obj.amount))
+    actual_balance = Decimal(str(user.actual_balance or 0))
+    
+    # ✅ DEBUG: Log what we're processing
+    print(f"🔍 Internal Payment - User: {user.id}, Package: {package_obj.name}, Amount: {amount}")
+    print(f"🔍 Locking: {is_locking}, Lock Days: {lock_days}")
+    print(f"🔍 Lock Details: {lock_details}")
+    
+    # Start atomic transaction
+    try:
+        # Deduct from actual balance first
+        deduct_from_actual = min(amount, actual_balance)
+        if deduct_from_actual > 0:
+            user.actual_balance -= deduct_from_actual
+            print(f"💰 Deducted {deduct_from_actual} from actual balance")
+        
+        # Deduct remaining from wallet
+        deduct_from_wallet = amount - deduct_from_actual
+        if deduct_from_wallet > 0:
+            wallet_tx = Transaction(
+                user_id=user.id,
+                wallet_id=user.wallet.id,
+                amount=-deduct_from_wallet,
+                type='package_purchase',
+                status='completed',
+                reference=str(uuid.uuid4())
+            )
+            db.session.add(wallet_tx)
+            user.wallet.balance -= deduct_from_wallet
+            print(f"💰 Deducted {deduct_from_wallet} from wallet balance")
+        
+        db.session.add(user)
+        
+        # Check for existing payment
+        existing_payment = handle_existing_payment(user, package_obj.amount, "package")
+        if existing_payment:
+            print(f"⚠️ Existing payment found: {existing_payment.reference}")
+            return jsonify({
+                "reference": existing_payment.reference,
+                "status": existing_payment.status,
+                "note": "Idempotent: existing record returned"
+            }), 200
+        
+        # Create payment record with lock details
+        print("📝 Creating payment record...")
+        payment = create_payment_record(
+            user=user,
+            amount=package_obj.amount,
+            phone=None,
+            payment_type="package",
+            package=package_obj,
+            lock_details=lock_details
+        )
+        if not payment:
+            print("❌ Failed to create payment record")
+            return jsonify({"error": "Failed to create payment record"}), 500
+        print(f"✅ Payment record created: {payment.id}")
+        
+        # ============================================================
+        # ✅ FIX: Convert Decimal values to float for JSON
+        # ============================================================
+        lock_details_serializable = None
+        if lock_details:
+            lock_details_serializable = {}
+            for key, value in lock_details.items():
+                if isinstance(value, Decimal):
+                    lock_details_serializable[key] = float(value)
+                else:
+                    lock_details_serializable[key] = value
+        
+        # Create user package with lock details
+        print("📦 Creating user package...")
+        print(f"   User: {user.id}")
+        print(f"   Package Catalog: {package_obj.id} - {package_obj.name}")
+        print(f"   Lock Details: {lock_details}")
+        
+        user_package = create_user_package(
+            user=user,
+            package_catalog=package_obj,
+            lock_details=lock_details
+        )
+        
+        print(f"✅ Package created: {user_package.id} - {user_package.package}")
+        print(f"   Locked: {user_package.is_locked}")
+        print(f"   Lock Duration: {user_package.lock_duration_days} days")
+        
+        # ✅ FIX: Update payment status with serializable data
+        payment.status = PaymentStatus.COMPLETED.value
+        payment.raw_response = json.dumps({
+            "method": "internal_balance",
+            "deduct_from_actual": float(deduct_from_actual),
+            "deduct_from_wallet": float(deduct_from_wallet),
+            "is_locking": is_locking,
+            "lock_days": lock_days,
+            "lock_details": lock_details_serializable  # ✅ Use serializable version
+        })
+        
+        # Create notification with lock info
+        lock_msg = f" (Locked for {lock_days} days)" if is_locking and lock_days > 0 else ""
+        notification = Notification(
+            user_id=user.id,
+            message=f"Package '{package_obj.name}' purchased successfully{lock_msg} using {'balance' if deduct_from_actual > 0 else 'wallet funds'}. Amount: {amount:,.0f} UGX",
+            notification_type='package_purchase',
+            is_read=False
+        )
+        db.session.add(notification)
+        print("✅ Notification created")
+        
+        # Send notifications
+        from notification.notification import send_package_activation_notifications
+        send_package_activation_notifications(user, package_obj)
+        print("✅ Activation notifications sent")
+        
+        # ✅ DEBUG: Check what's in the session before commit
+        print("🔄 Committing transaction...")
+        db.session.commit()
+        print("✅ Database commit successful")
+        
+        # ========== PROCESS BONUSES ==========
+        is_first_purchase = not user_has_any_package(user.id)
+        bonus_success = False
+        bonus_message = ""
+
+        if is_first_purchase:
+            print("👤 FIRST TIME PURCHASE: Processing referral bonuses...")
+            from bonus.payment_processor import process_package_purchase
+            bonus_success, bonus_message = process_package_purchase(payment)
+            print(f"Bonus processing result: {bonus_success} - {bonus_message}")
+        else:
+            from bonus.refferral_tree import ReferralTreeHelper
+            print(f"👤 User has existing package - crediting direct referrer only")
+            bonus_success, bonus_message, transaction_id = ReferralTreeHelper.process_direct_referral_bonus(
+                user_id=user.id,
+                purchase_amount=payment.amount
+            )
+            print(f"Direct referral bonus result: {bonus_success} - {bonus_message}")
+            if transaction_id:
+                print(f"Transaction ID: {transaction_id}")
+
+        # Build response - ✅ ensure all values are JSON serializable
+        response_data = {
+            "success": True,
+            "reference": payment.reference,
+            "status": PaymentStatus.COMPLETED.value,
+            "payment_type": "package",
+            "package": package_obj.name,
+            "product": package_obj.name,
+            "amount": float(amount),
+            "is_locking": is_locking,
+            "lock_days": lock_days if is_locking else 0,
+            "message": f"Package purchased using {'balance' if deduct_from_actual > 0 else 'wallet funds'}",
+            "new_actual_balance": float(user.actual_balance),
+            "new_wallet_balance": float(user.wallet.balance) if user.wallet else 0,
+            "deducted_from_actual": float(deduct_from_actual),
+            "deducted_from_wallet": float(deduct_from_wallet),
+            "referral_bonus_processed": bonus_success,
+            "bonus_message": bonus_message,
+            "package_id": user_package.id  # ✅ Include package ID to verify
+        }
+        
+        # ✅ FIX: Add lock details with float values
+        if lock_details and is_locking:
+            response_data["lock_details"] = {
+                "daily_rate": float(lock_details.get("daily_rate", 0)),
+                "daily_return": float(lock_details.get("daily_return", 0)),
+                "total_return": float(lock_details.get("total_return", 0)),
+                "bonus_percentage": float(lock_details.get("bonus_percentage", 0)),
+                "duration_days": lock_details.get("duration_days", 26)
+            }
+
+        print("✅ Internal package payment completed successfully")
+        print(json.dumps(response_data, indent=2))
+        
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Internal package payment failed: {e}")
+        import traceback
+        traceback.print_exc()
+        logger.error(f"Internal package payment failed: {e}", exc_info=True)
+        return jsonify({"error": f"Payment failed: {str(e)}"}), 500
+
+
+
+# ============================================================
+# EXTERNAL PACKAGE PAYMENT - WITH LOCKING SUPPORT
+# ============================================================
+
+def process_external_package_payment(user, amount, phone, package_obj, lock_days=0, is_locking=False, lock_details=None):
+    """
+    Process package purchase via external MarzPay payment with locking support.
+    """
+    try:
+        print("=" * 60)
+        print("💳 PROCESSING EXTERNAL PACKAGE PAYMENT")
+        print(f"Package: {package_obj.name}")
+        print(f"Amount: {amount}")
+        print(f"Locking: {is_locking}, Days: {lock_days}")
+        print("=" * 60)
+        
+        # Create payment record with lock details
+        payment = create_payment_record(
+            user=user,
+            amount=amount,
+            phone=phone,
+            payment_type="package",
+            package=package_obj,
+            lock_details=lock_details
+        )
+        
+        if not payment:
+            return jsonify({"error": "Failed to create payment record"}), 500
+        
+        db.session.commit()
+        
+        # Send to MarzPay with lock info in description
+        marz_data, error = send_to_pesajet(
+            payment=payment,
+            phone=phone,
+            amount=amount,
+            package=package_obj,
+            lock_details=lock_details
+        )
+        
+        if error:
+            payment.status = PaymentStatus.FAILED.value
+            db.session.commit()
+            return jsonify(error), 502
+        
+        # Update payment with MarzPay response
+        if marz_data:
+            payment.external_ref = marz_data.get("internal_reference")
+            payment.status = PaymentStatus.PENDING.value
+            print(f"✅ Stored external_ref: {payment.external_ref}")
+            db.session.commit()
+        
+        # Build response
+        response_data = {
+            "success": True,
+            "reference": payment.reference,
+            "status": payment.status,
+            "payment_type": "package",
+            "package": package_obj.id,
+            "product": package_obj.name,
+            "amount": float(amount),
+            "is_locking": is_locking,
+            "lock_days": lock_days if is_locking else 0,
+            "checkout_url": marz_data.get("pop_up_info") if marz_data else None,
+            "message": "Payment initiated. Please complete payment."
+        }
+        
+        # Add lock details to response
+        if lock_details and is_locking:
+            response_data["lock_details"] = {
+                "daily_rate": lock_details.get("daily_rate", 0),
+                "daily_return": float(lock_details.get("daily_return", 0)),
+                "total_return": float(lock_details.get("total_return", 0)),
+                "bonus_percentage": lock_details.get("bonus_percentage", 0)
+            }
+        
+        print("✅ External payment initiated successfully")
+        print(json.dumps(response_data, indent=2))
+        
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"External package payment failed: {e}", exc_info=True)
+        return jsonify({"error": f"Payment failed: {str(e)}"}), 500
+
+
+# ============================================================
+# PAYMENT CALLBACK - Webhook from MarzPay
+# ============================================================
+
+
+
+PESAJET_WEBHOOK_SECRET = os.environ.get("PESAJET_WEBHOOK_SECRET", "").encode()
+def _get_webhook_secret_bytes() -> bytes:
+    """Read the secret LIVE from env every call — never cache at import time."""
+    raw = os.environ.get("PESAJET_WEBHOOK_SECRET", "")
+    if not raw:
+        print("❌ PESAJET_WEBHOOK_SECRET is not set")
+        return b""
+    # Strip any accidental Windows CR/LF
+    raw = raw.strip()
+    return raw.encode("utf-8")
+# ============================================================
+# SIGNATURE VERIFICATION
+# ============================================================
+def verify_pesajet_signature(raw_body: bytes, signature_hex: str) -> bool:
+    """Try both documented verification methods (raw body, and body-without-signature)."""
+    secret = _get_webhook_secret_bytes()
+    if not signature_hex or not PESAJET_WEBHOOK_SECRET:
+        return False
+    
+    if not secret:
+        print("❌ verify: PESAJET_WEBHOOK_SECRET is empty")
+        return False
+
+    # Method 1: HMAC over raw body, compared to X-Webhook-Signature header
+    expected = hmac.new(PESAJET_WEBHOOK_SECRET, raw_body, hashlib.sha256).hexdigest()
+
+    if hmac.compare_digest(expected, signature_hex):
+        return True
+
+    # Method 2: HMAC over JSON minus "signature", compared to body's "signature"
+    try:
+        parsed = json.loads(raw_body)
+        sig_in_body = parsed.pop("signature", "")
+        if not sig_in_body:
+            return False
+        canonical = json.dumps(parsed, separators=(",", ":")).encode()
+        expected_canon = hmac.new(
+            PESAJET_WEBHOOK_SECRET, canonical, hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected_canon, sig_in_body)
+    except Exception:
+        return False
+
+def _record_webhook(webhook_id, event, payload=None, signature=None, reference=None):
+    if not webhook_id:
+        return
+    from sqlalchemy.exc import IntegrityError
+    try:
+        with db.session.begin_nested():
+            db.session.add(WebhookEvent(
+                provider="pesajet",
+                event_type=event or "unknown",
+                payload=payload or {},
+                signature=signature,
+                reference=reference,
+                webhook_id=webhook_id,
+                status="received",
+                processed=False,
+            ))
+    except IntegrityError:
+        raise                      # let the route turn this into 200/duplicate
+    except Exception as e:
+        print(f"⚠️ webhook audit skipped (non-fatal): {e}")
+
+
+
+def _webhook_already_processed(webhook_id) -> bool:
+    if not webhook_id:
+        return False
+    try:
+        return bool(WebhookEvent.query.filter_by(webhook_id=webhook_id).first())
+    except Exception:
+        return False
+
+
+# ============================================================
+# SHARED: parse event/status
+# ============================================================
+def _classify_event(data: dict):
+    """Return 'success' | 'failed' | None from a PesaJet webhook payload."""
+    event = (data.get("event") or "").lower()
+    status = (data.get("status") or "").upper()
+
+    if event == "payment.completed" or status == "COMPLETED":
+        return "success"
+    if event in ("payment.failed", "payment.expired") or status in ("FAILED", "EXPIRED"):
+        return "failed"
+    return None
+
+
+# ============================================================
+# COLLECTION HANDLER
+# ============================================================
+def handle_collection_webhook(payment, data, outcome):
+    """Existing collection logic, moved into its own function."""
+    event = (data.get("event") or "").lower()
+    status_text = (data.get("status") or "").upper()
+    ext_uuid = data.get("transactionId")
+    provider_ref = data.get("providerReference")
+    network = data.get("provider")
+
+    if outcome == "success":
+        payment.status = PaymentStatus.COMPLETED.value
+        payment.verified = True
+        payment.updated_at = datetime.now(timezone.utc)
+        payment.provider = (network or "pesajet").lower()
+        payment.external_ref = ext_uuid
+        payment.provider_reference = provider_ref
+        payment.raw_response = json.dumps(data)
+
+        print(f"✅ Collection completed for payment {payment.id}")
+
+        if payment.payment_type == "package":
+            user = User.query.get(payment.user_id)
+            package_obj = payment.package_catalog
+
+            if not package_obj or not user:
+                payment.status = PaymentStatus.FAILED.value
+                db.session.commit()
+                print(f"❌ Missing package/user for payment {payment.id}")
+                return
+
+            lock_details = None
+            is_locking = False
+            lock_days = 0
+
+            if hasattr(payment, "features") and payment.features:
+                features = payment.features
+                if features.get("is_locking"):
+                    is_locking = True
+                    lock_days = features.get("lock_days", 0)
+                    lock_details = {
+                        "is_locking": True,
+                        "lock_days": lock_days,
+                        "bonus_percentage": features.get("bonus_percentage", 0),
+                        "daily_rate": features.get("daily_rate", 0),
+                        "daily_return": features.get("daily_return", 0),
+                        "total_return": features.get("total_return", 0),
+                    }
+
+            from blueprints.payments_helpers import create_user_package
+            user_package = create_user_package(
+                user=user,
+                package_catalog=package_obj,
+                lock_details=lock_details,
+            )
+            print(f"✅ Package created ID: {user_package.id}")
+
+            from notification.notification import send_package_activation_notifications
+            send_package_activation_notifications(user, package_obj)
+            
+            lock_msg = ""
+            import pytz
+            kampala = pytz.timezone("Africa/Kampala")
+            if is_locking and lock_days > 0 and user_package.lock_end_date:
+                withdraw_date = user_package.lock_end_date + timedelta(days=0)
+                withdraw_date_local = withdraw_date.astimezone(kampala)
+                withdraw_date_str = withdraw_date_local.strftime("%d %b %Y")
+
+                lock_msg = f"\n🔒 Locked for {lock_days} days\n💰 Withdraw on {withdraw_date_str}"
+            db.session.add(Notification(
+                user_id=user.id,
+                message=f"✅ {package_obj.name} activated{lock_msg}",
+                notification_type="package_activation",
+                is_read=False,
+            ))
+
+            existing_package = Package.query.filter(
+                Package.user_id == user.id,
+                Package.id != user_package.id,
+            ).first()
+
+            if existing_package is None:
+                from bonus.payment_processor import process_package_purchase
+                ok, msg = process_package_purchase(payment)
+                print(f"Bonus (first purchase): {ok} - {msg}")
+            else:
+                from bonus.refferral_tree import ReferralTreeHelper
+                ok, msg, txn = ReferralTreeHelper.process_direct_referral_bonus(
+                    user_id=user.id,
+                    purchase_amount=payment.amount,
+                )
+                print(f"Bonus (direct referrer): {ok} - {msg}")
+
+
+        elif payment.payment_type == "deposit":
+            handle_deposit_webhook(payment, data, network, ext_uuid, provider_ref)
+
+        else:
+            print(f"⚠️ Unhandled collection payment_type: {payment.payment_type}")
+
+    else:  # failed / expired
+        failure_reason = data.get("failureReason")
+        print(f"❌ Collection failed (event={event}, status={status_text}, reason={failure_reason})")
+        payment.status = PaymentStatus.FAILED.value
+        payment.updated_at = datetime.now(timezone.utc)
+        payment.raw_response = json.dumps(data)
+
+# DEPOSIT HANDLER
+# ============================================================
+def handle_deposit_webhook(payment, data, network, ext_uuid, provider_ref):
+    """
+    Credit a completed deposit to the user's actual_balance.
+
+    Idempotency: uses payment.status guard in the caller. Also checks for an
+    existing completed transaction with this payment's reference, so a
+    double-fired webhook can never credit twice.
+    """
+    from decimal import Decimal
+    from models import Transaction, Notification, Wallet
+
+    user = User.query.get(payment.user_id)
+    if not user:
+        payment.status = PaymentStatus.FAILED.value
+        db.session.commit()
+        print(f"❌ Deposit: user {payment.user_id} not found for payment {payment.id}")
+        return
+
+    # --- Idempotency guard #2 (belt + suspenders) ---
+    already = Transaction.query.filter_by(
+        user_id=user.id,
+        reference=payment.reference,
+        type="deposit",
+        status="completed",
+    ).first()
+    if already:
+        print(f"⚠️ Deposit already credited for payment {payment.id} "
+              f"(txn {already.id}) — skipping")
+        return
+
+    try:
+        amount = Decimal(str(payment.amount or 0))
+        if amount <= 0:
+            print(f"❌ Deposit payment {payment.id} has invalid amount {amount}")
+            payment.status = PaymentStatus.FAILED.value
+            db.session.commit()
+            return
+
+        # --- Ensure wallet exists (for the transaction FK) ---
+        wallet = user.wallet
+        if not wallet:
+            wallet = Wallet(user_id=user.id, balance=Decimal("0"), locked_balance=Decimal("0"))
+            db.session.add(wallet)
+            db.session.flush()
+            user.wallet = wallet
+
+        # --- Credit actual balance ---
+        before = Decimal(str(user.actual_balance or 0))
+        user.actual_balance = before + amount
+        db.session.add(user)
+
+        # --- Audit transaction ---
+        txn = Transaction(
+            user_id=user.id,
+            wallet_id=wallet.id,
+            amount=amount,
+            type="deposit",
+            status="completed",
+            reference=payment.reference,
+            phone_number=payment.phone_number,
+            purchase_type="Mobile money deposit",
+      
+            created_at=datetime.now(timezone.utc),
+        )
+        db.session.add(txn)
+
+        # --- Notify user ---
+        db.session.add(Notification(
+            user_id=user.id,
+            message=(
+                f"💰 Deposit of UGX {amount:,.0f} received. "
+                f"New balance: UGX {user.actual_balance:,.0f}"
+            ),
+            notification_type="deposit_completed",
+            is_read=False,
+        ))
+
+        print(f"✅ Deposit credited: user {user.id}, "
+              f"amount {amount:,.0f}, new balance {user.actual_balance:,.0f}, "
+              f"txn ref {payment.reference}")
+
+    except Exception as e:
+        db.session.rollback()
+        payment.status = PaymentStatus.FAILED.value
+        db.session.commit()
+        print(f"❌ Deposit credit failed for payment {payment.id}: {e}")
+        import traceback
+        traceback.print_exc()
+# ============================================================
+# DISBURSEMENT HANDLER
+# ============================================================
+def handle_disbursement_webhook(withdrawal, data, outcome):
+    event = (data.get("event") or "").lower()
+    status_text = (data.get("status") or "").upper()
+    ext_uuid = data.get("transactionId")
+    provider_ref = data.get("providerReference")
+    failure_reason = data.get("failureReason")
+
+    if outcome == "success":
+        withdrawal.status = "completed"
+        withdrawal.external_ref = ext_uuid
+        withdrawal.updated_at = datetime.now(timezone.utc)
+        print(f"✅ Withdrawal completed: {withdrawal.reference} (txn={ext_uuid})")
+
+        # Notify the user
+        try:
+            db.session.add(Notification(
+                user_id=withdrawal.user_id,
+                message=f"Your withdrawal of UGX {withdrawal.net_amount:,.0f} has been sent successfully.",
+                notification_type="withdrawal_completed",
+                is_read=False,
+            ))
+        except Exception as e:
+            print(f"⚠️ Failed to create withdrawal-completed notification: {e}")
+
+    else:  # failed / expired
+        print(f"❌ Withdrawal failed (event={event}, status={status_text}, reason={failure_reason})")
+
+        # Refund the deducted balance
+        user = db.session.get(User, withdrawal.user_id)
+        if user:
+            balance_details = {
+                "actual_deducted": str(withdrawal.actual_balance_deducted or 0),
+                "wallet_deducted": str(withdrawal.wallet_balance_deducted or 0),
+            }
+            WithdrawalProcessor.fail_withdrawal(
+                withdrawal.id,
+                withdrawal.user_id,
+                Decimal(str(withdrawal.amount)),
+                balance_details,
+            )
+        else:
+            # Can't refund — still mark failed
+            WithdrawalRecordManager.update_status(withdrawal.id, "failed")
+
+        # Notify the user
+        try:
+            db.session.add(Notification(
+                user_id=withdrawal.user_id,
+                message=f"Your withdrawal of UGX {withdrawal.net_amount:,.0f} failed and has been refunded.",
+                notification_type="withdrawal_failed",
+                is_read=False,
+            ))
+        except Exception as e:
+            print(f"⚠️ Failed to create withdrawal-failed notification: {e}")
+
+
+import threading
+# ============================================================
+# BACKGROUND BUSINESS LOGIC (runs AFTER the 200 is sent)
+# ============================================================
+def _process_webhook_business_logic(data: dict, webhook_id):
+    """
+    All the slow work: row locks, package creation, deposits,
+    referrals, notifications. Runs in a background thread.
+    """
+    outcome = _classify_event(data)
+    if outcome is None:
+        print(f"⚠️ Unknown event/status: {data.get('event')} / {data.get('status')}")
+        return
+
+    transaction_id = data.get("transactionId")
+    reference = data.get("reference") or ""
+    reference_base = reference.split("|", 1)[0] if reference else None
+
+    print(f"🔎 [bg] txn={transaction_id} ref={reference} outcome={outcome}")
+
+    # --------------------------------------------------------
+    # COLLECTION (Payment) FIRST
+    # --------------------------------------------------------
+    payment = None
+    if transaction_id:
+        payment = Payment.query.filter_by(external_ref=transaction_id)\
+            .with_for_update().first()
+    if not payment and reference_base:
+        payment = Payment.query.filter_by(reference=reference_base)\
+            .with_for_update().first()
+
+    if payment:
+        print(f"📦 Matched COLLECTION: payment id={payment.id} status={payment.status}")
+
+        if payment.status in (
+            PaymentStatus.COMPLETED.value,
+            PaymentStatus.FAILED.value,
+        ):
+            print(f"⚠️ Payment already final: {payment.status}")
+            db.session.commit()
+            return
+
+        try:
+            handle_collection_webhook(payment, data, outcome)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+        print(f"✅ [bg] collection processed for payment {payment.id}")
+        return
+
+    # --------------------------------------------------------
+    # DISBURSEMENT (Withdrawal)
+    # --------------------------------------------------------
+    withdrawal = None
+    if transaction_id:
+        withdrawal = Withdrawal.query.filter_by(external_ref=transaction_id)\
+            .with_for_update().first()
+    if not withdrawal and reference_base:
+        withdrawal = Withdrawal.query.filter_by(reference=reference_base)\
+            .with_for_update().first()
+
+    if withdrawal:
+        print(f"💸 Matched DISBURSEMENT: withdrawal id={withdrawal.id} status={withdrawal.status}")
+
+        if withdrawal.status in ("completed", "failed", "cancelled"):
+            print(f"⚠️ Withdrawal already final: {withdrawal.status}")
+            db.session.commit()
+            return
+
+        try:
+            handle_disbursement_webhook(withdrawal, data, outcome)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+        print(f"✅ [bg] disbursement processed for withdrawal {withdrawal.id}")
+        return
+
+    # --------------------------------------------------------
+    # NO MATCH
+    # --------------------------------------------------------
+    print(f"⚠️ [bg] No matching Payment or Withdrawal "
+          f"for txn={transaction_id} ref={reference}")
+
+import threading
+import time
+from flask import current_app, jsonify, request
+from sqlalchemy.exc import IntegrityError
+
+
+# ============================================================
+# MAIN CALLBACK ROUTE — FAST ACK + TIMING INSTRUMENTATION
+# ============================================================
+@bp.route("/payments/callback", methods=["POST"])
+def payment_callback():
+    """Unified PesaJet webhook handler — fast ACK, async processing."""
+    t_start = time.perf_counter()
+
+    print("=" * 60)
+    print("📞 PESAJET WEBHOOK RECEIVED")
+    print("=" * 60)
+
+    # --------------------------------------------------------
+    # 1. SIGNATURE VERIFICATION
+    # --------------------------------------------------------
+    t0 = time.perf_counter()
+    raw_body = request.get_data()
+    signature = request.headers.get("X-Webhook-Signature", "")
+    webhook_id = request.headers.get("X-Webhook-Id")
+
+    if not verify_pesajet_signature(raw_body, signature):
+        elapsed = (time.perf_counter() - t_start) * 1000
+        print(f"❌ Invalid webhook signature (total {elapsed:.0f}ms)")
+        return jsonify({"error": "Signature mismatch"}), 401
+    t_verify = (time.perf_counter() - t0) * 1000
+
+    # --------------------------------------------------------
+    # 2. PARSE JSON
+    # --------------------------------------------------------
+    t0 = time.perf_counter()
+    try:
+        data = json.loads(raw_body)
+    except Exception:
+        elapsed = (time.perf_counter() - t_start) * 1000
+        print(f"❌ Invalid JSON (total {elapsed:.0f}ms)")
+        return jsonify({"error": "Invalid JSON"}), 400
+    t_parse = (time.perf_counter() - t0) * 1000
+
+    # --------------------------------------------------------
+    # 3. DEDUPLICATION CHECK
+    # --------------------------------------------------------
+    t0 = time.perf_counter()
+    if _webhook_already_processed(webhook_id):
+        elapsed = (time.perf_counter() - t_start) * 1000
+        print(f"⚠️ Duplicate webhook {webhook_id} "
+              f"(dedup {t_parse:.0f}ms, total {elapsed:.0f}ms)")
+        return jsonify({"status": "duplicate"}), 200
+    t_dedup = (time.perf_counter() - t0) * 1000
+
+    # --------------------------------------------------------
+    # 4. AUDIT INSERT + COMMIT
+    # --------------------------------------------------------
+    t0 = time.perf_counter()
+    try:
+        _record_webhook(
+            webhook_id,
+            data.get("event"),
+            data,
+            signature,
+            data.get("transactionId"),
+        )
+        db.session.commit()
+    except IntegrityError:
+        # Unique constraint on webhook_id — safe duplicate
+        db.session.rollback()
+        elapsed = (time.perf_counter() - t_start) * 1000
+        print(f"⚠️ Duplicate webhook (unique constraint) {webhook_id} "
+              f"(total {elapsed:.0f}ms)")
+        return jsonify({"status": "duplicate"}), 200
+    except Exception as e:
+        # Audit failure must not block ACK
+        db.session.rollback()
+        print(f"⚠️ webhook audit commit failed (non-fatal): {e}")
+    t_audit = (time.perf_counter() - t0) * 1000
+
+    # --------------------------------------------------------
+    # 5. ACK THE GATEWAY IMMEDIATELY
+    # --------------------------------------------------------
+    t_total = (time.perf_counter() - t_start) * 1000
+    print(
+        f"⏱ [fast-path] verify={t_verify:.0f}ms "
+        f"parse={t_parse:.0f}ms "
+        f"dedup={t_dedup:.0f}ms "
+        f"audit={t_audit:.0f}ms "
+        f"TOTAL={t_total:.0f}ms"
+    )
+
+    # Capture the real app object BEFORE the thread starts.
+    # current_app is a proxy — it is not valid inside the thread.
+    app_obj = current_app._get_current_object()
+
+    def process_in_background():
+        with app_obj.app_context():
+            try:
+                _process_webhook_business_logic(data, webhook_id)
+            except Exception as e:
+                app_obj.logger.error(
+                    f"Background webhook processing failed: {e}",
+                    exc_info=True,
+                )
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+            finally:
+                # Release the connection this thread checked out
+                try:
+                    db.session.remove()
+                except Exception:
+                    pass
+
+    threading.Thread(target=process_in_background, daemon=True).start()
+
+    return jsonify({"status": "ok"}), 200
+# ============================================================
+# MAIN CALLBACK ROUTE — MUST RETURN FAST (< 1s)
+# ============================================================
+# @bp.route("/payments/callback", methods=["POST"])
+# def payment_callback():
+#     """Unified PesaJet webhook handler — fast ACK, async processing."""
+#     print("=" * 60)
+#     print("📞 PESAJET WEBHOOK RECEIVED")
+#     print("=" * 60)
+
+ 
+
+#     # 1. Signature verification (fast)
+#     raw_body = request.get_data()
+#     signature = request.headers.get("X-Webhook-Signature", "")
+#     webhook_id = request.headers.get("X-Webhook-Id")
+
+#     if not verify_pesajet_signature(raw_body, signature):
+#         print("❌ Invalid webhook signature")
+#         return jsonify({"error": "Signature mismatch"}), 401
+
+#     # 2. Parse JSON (fast)
+#     try:
+#         data = json.loads(raw_body)
+#     except Exception:
+#         return jsonify({"error": "Invalid JSON"}), 400
+
+#     # 3. Deduplication check (single fast query)
+#     if _webhook_already_processed(webhook_id):
+#         print(f"⚠️ Duplicate webhook delivery: {webhook_id}")
+#         return jsonify({"status": "duplicate"}), 200
+
+#     # 4. Audit-log the raw event (fast, one INSERT)
+#     try:
+#         _record_webhook(
+#             webhook_id,
+#             data.get("event"),
+#             data,
+#             signature,
+#             data.get("transactionId"),
+#         )
+#         db.session.commit()
+#     except Exception as e:
+#         # Audit failure must not block ACK, but log it
+#         db.session.rollback()
+#         print(f"⚠️ webhook audit commit failed (non-fatal): {e}")
+
+#     # 5. ✅ ACK the gateway immediately, then process in background
+#     current_app_ref = current_app._get_current_object()
+#     def process_in_background():
+    
+#         with current_app_ref.app_context():
+#             try:
+#                 _process_webhook_business_logic(data, webhook_id)
+#             except Exception as e:
+#                 current_app_ref.logger.error(
+#                     f"Background webhook processing failed: {e}",
+#                     exc_info=True,
+#                 )
+#                 try:
+#                     db.session.rollback()
+#                 except Exception:
+#                     pass
+#             finally:
+#                 # Always release the session held by this thread
+#                 try:
+#                     db.session.remove()
+#                 except Exception:
+#                     pass
+
+#     threading.Thread(target=process_in_background, daemon=True).start()
+
+#     return jsonify({"status": "ok"}), 200
+
+
+
+# ============================================================
+# GET PACKAGE CATALOG ENDPOINT
+# ============================================================
+
+@bp.route("/payments/packages", methods=['GET'])
+def get_packages():
+    """Get all available express packages with locking options."""
+    
+    try:
+        # Get packages from catalog
+        packages = []
+        for key, catalog in express_PACKAGE_CATALOG.items():
+            packages.append({
+                "id": key,
+                "name": catalog["name"],
+                "display_name": catalog["display_name"],
+                "amount": catalog["amount"],
+                "daily_return": catalog["features"]["daily_profit"],
+                "total_return": catalog["features"]["total_profit"],
+                "daily_rate": catalog["bonus_percentage"],
+                "duration_days": catalog["duration_days"],
+                "level": catalog["features"]["support_level"],
+                "emoji": catalog["features"]["machine_emoji"],
+                "is_locking": catalog.get("is_locking_package", False),
+                "lock_tiers": [
+                    {"days": days, "bonus": bonus}
+                    for days, bonus in catalog.get("lock_bonus_tiers", {}).items()
+                ],
+                "lock_min_days": catalog.get("lock_minimum_days", 7),
+                "lock_max_days": catalog.get("lock_maximum_days", 56),
+                "is_active": catalog.get("is_active", True)
+            })
+        
+        return jsonify({
+            "success": True,
+            "packages": packages,
+            "count": len(packages)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Failed to get packages: {e}", exc_info=True)
+        return jsonify({"error": "Failed to load packages"}), 500
+
+
+# ============================================================
+# GET PACKAGE DETAILS
+# ============================================================
+
+@bp.route("/payments/packages/<package_id>", methods=['GET'])
+def get_package_detail(package_id):
+    """Get detailed information about a specific package."""
+    
+    try:
+        catalog = express_PACKAGE_CATALOG.get(package_id.lower())
+        if not catalog:
+            return jsonify({"error": "Package not found"}), 404
+        
+        response = {
+            "id": package_id,
+            "name": catalog["name"],
+            "display_name": catalog["display_name"],
+            "amount": catalog["amount"],
+            "daily_return": catalog["features"]["daily_profit"],
+            "total_return": catalog["features"]["total_profit"],
+            "daily_rate": catalog["bonus_percentage"],
+            "duration_days": catalog["duration_days"],
+            "level": catalog["features"]["support_level"],
+            "emoji": catalog["features"]["machine_emoji"],
+            "is_locking": catalog.get("is_locking_package", False),
+            "lock_tiers": [
+                {
+                    "days": days, 
+                    "bonus": bonus,
+                    "daily_rate": catalog["bonus_percentage"] + bonus,
+                    "daily_return": (catalog["amount"] * (catalog["bonus_percentage"] + bonus) / 100)
+                }
+                for days, bonus in catalog.get("lock_bonus_tiers", {}).items()
+            ],
+            "lock_min_days": catalog.get("lock_minimum_days", 7),
+            "lock_max_days": catalog.get("lock_maximum_days", 56),
+            "is_active": catalog.get("is_active", True)
+        }
+        
+        return jsonify({"success": True, "package": response}), 200
+        
+    except Exception as e:
+        logger.error(f"Failed to get package details: {e}", exc_info=True)
+        return jsonify({"error": "Failed to load package details"}), 500
+#==========================================================================================================
+@bp.route("/payments/callback/", methods=['POST'])
+def payment_callback_():
+    payment = None
+    try:
+        data = request.get_json(silent=True) or {}
+        print(f"🔍 RAW CALLBACK DATA: {json.dumps(data, indent=2)}")
+        
+        if not data:
+            return jsonify({"error": "No JSON data"}), 400
+
+        transaction = data.get("transaction", {})
+        status = transaction.get("status", "completed").lower()
+        print(f"🔄 MARZ STATUS: {status}")
+        
+        reference = (
+            data.get("transaction", {}).get("reference") or
+            data.get("reference")
+        )
+        ext_uuid = transaction.get("uuid") or data.get("uuid")
+        
+        if not reference and not ext_uuid:
+            return jsonify({"error": "Missing reference"}), 400
+        
+        # Get payment with row lock
+        payment = None
+        if reference:
+            payment = Payment.query.filter_by(reference=reference).with_for_update().first()
+        
+        if not payment and ext_uuid:
+            payment = Payment.query.filter_by(external_ref=ext_uuid).with_for_update().first()
+        
+        if not payment:
+            print(f"No matching payment for reference {reference} / ext {ext_uuid}")
+            return jsonify({"status": "ignored"}), 200
+            
+        # Prevent duplicate processing
+        if payment.status == PaymentStatus.COMPLETED.value:
+            print(f"⚠️ Payment already processed: {payment.reference}")
+            return jsonify({"status": "already_processed"}), 200
+        
+        if payment.status == PaymentStatus.FAILED.value:
+            print(f"⚠️ Payment previously failed: {payment.reference}")
+            return jsonify({"status": "already_failed"}), 200
+        
+        # Handle success status
+        if status in ("complete", "completed", "paid"):
+            payment.status = PaymentStatus.COMPLETED.value
+            payment.verified = True
+            payment.updated_at = datetime.now(timezone.utc)
+            payment.provider = data.get("transaction", {}).get("provider")
+            payment.external_ref = transaction.get("uuid")
+            payment.raw_response = json.dumps(data)
+            payment.provider_reference = transaction.get("provider_reference")
+            
+            print(f"🔍 Checking payment type: {payment.payment_type}")
+            print(f"✅ Payment status updated to: {payment.status}")
+            
+                        # ============================================================
+            # MEDIA STAR HANDLER
+            # ============================================================
+            if payment.payment_type == "media_star":
+                print("📺 Processing Media Star subscription from callback")
+                user = User.query.get(payment.user_id)
+                
+                if not user:
+                    payment.status = PaymentStatus.FAILED.value
+                    db.session.commit()
+                    return jsonify({"error": "User not found"}), 400
+                
+                try:
+                    # Extract Media Star metadata from raw_response
+                    metadata = json.loads(payment.raw_response or '{}')
+                    print(f"📺 Media Star metadata: {metadata}")
+                    
+                    # Get subscription details (stored during initiation)
+                    subscription_data = json.loads(payment.raw_response) if payment.raw_response else {}
+                    if 'subscription' in subscription_data:
+                        package_name = subscription_data.get('subscription')
+                        serial_number = subscription_data.get('serial_number')
+                        package_code = subscription_data.get('package_code')
+                        amount = subscription_data.get('amount', 0)
+                        service_charge = subscription_data.get('service_charge', 1500)
+                    else:
+                        # Fallback: try to get from metadata field
+                        metadata_field = json.loads(payment.metadata) if payment.metadata else {}
+                        package_name = metadata_field.get('subscription', 'Media Star')
+                        serial_number = metadata_field.get('serial_number', 'N/A')
+                        package_code = metadata_field.get('package_code', 'N/A')
+                        amount = float(payment.amount) - 1500
+                        service_charge = 1500
+                    
+                    print(f"📺 Activating: {package_name} for serial: {serial_number}")
+                    
+                    # ✅ TODO: Call Media Star API to activate subscription
+                
+                    # Create success notification
+                    from models import Notification
+                    notification = Notification(
+                        user_id=user.id,
+                        message=f"📺 Media Star TV subscription '{package_name}' activated successfully! Amount: {amount:,.0f} UGX + {service_charge:,.0f} UGX service charge.",
+                        notification_type='bill_payment',
+                        is_read=False
+                    )
+                    db.session.add(notification)
+                    
+                    # Also add to user's actual balance if there's any remaining? No, payment was external
+                    # Just mark as completed
+                    
+                    db.session.commit()
+                    print(f"✅ Media Star subscription activated for user {user.id}")
+                    
+                    return jsonify({
+                        "status": "ok",
+                        "payment_type": "media_star",
+                        "subscription": package_name,
+                        "message": "Media Star subscription activated successfully"
+                    }), 200
+                    
+                except Exception as e:
+                    db.session.rollback()
+                    current_app.logger.error(f"Media Star processing failed: {e}", exc_info=True)
+                    payment.status = PaymentStatus.PENDING.value
+                    db.session.add(payment)
+                    db.session.commit()
+                    return jsonify({"error": f"Media Star processing failed: {str(e)}"}), 500
+
+
+            # ✅ FIX 2: Process based on payment type
+            if payment.payment_type == "package":
+                user = User.query.get(payment.user_id)
+                package_obj = payment.package_catalog
+                
+                # ✅ FIX 3: Correct logic - check BOTH conditions
+                if not package_obj or not user:
+                    payment.status = PaymentStatus.FAILED.value
+                    db.session.commit()
+                    return jsonify({"error": "Missing Package or User"}), 400
+                
+                try:
+                    from blueprints.payments_helpers import create_user_package
+                    user_package = create_user_package(user, package_obj)
+                    
+                    from notification.notification import send_package_activation_notifications
+                    send_package_activation_notifications(user, package_obj)
+
+                    
+                    existing_package = Package.query.filter(
+                        Package.user_id == user.id,
+                        Package.id != user_package.id 
+                    ).first()
+                    
+                    is_first_purchase = (existing_package is None)
+
+                     # ========== STEP 4: PROCESS BONUSES ONLY IF FIRST PURCHASE ==========
+                    if is_first_purchase:
+                        print("USER FIRST TIME PACKAGE PURCHASE: Processing Referral Bonuses....")
+                        from bonus.payment_processor import process_package_purchase
+                        success, message = process_package_purchase(payment)
+                        print(f"Bonus processing result: {success} - {message}")
+                    else:
+                        from bonus.refferral_tree import ReferralTreeHelper
+                        print(f"User {user.id} already has a package - crediting direct referrer only")
+                        success, message, transaction_id = ReferralTreeHelper.process_direct_referral_bonus(
+                                            user_id=user.id,
+                                            purchase_amount=payment.amount
+                                        )
+                        
+                        print(f"Direct referral bonus result: {success} - {message}")
+                        if transaction_id:
+                            print(f"Transaction ID: {transaction_id}")
+                     
+                    # =========================================================================
+     
+                    # ✅ FIX 4: Commit ONLY after ALL operations succeed
+                    db.session.commit()
+                    
+                    if success:
+                        print(f"✅ Package processed: {message}")
+                        return jsonify({
+                            "status": "ok",
+                            "bonus_status": "success",
+                            "message": message
+                        }), 200
+                    else:
+                        # ✅ FIX 5: Even if bonus processing had issues, package is created
+                        # This is still a success for the payment
+                        print(f"⚠️ Package created but bonus issue: {message}")
+                        return jsonify({
+                            "status": "ok",
+                            "bonus_status": "warning",
+                            "message": "Package created but bonus processing had issues"
+                        }), 200
+                        
+                except Exception as e:
+                    db.session.rollback()
+                    current_app.logger.error(f"Package processing failed: {e}", exc_info=True)
+                    # Keep payment as PENDING for retry
+                    payment.status = PaymentStatus.PENDING.value
+                    db.session.add(payment)
+                    db.session.commit()
+                    return jsonify({"error": f"Package processing failed: {str(e)}"}), 500
+                    
+            elif payment.payment_type == "deposit":
+                user = User.query.get(payment.user_id)
+                if not user:
+                    payment.status = PaymentStatus.FAILED.value
+                    db.session.rollback()
+                    return jsonify({"error": "User not found"}), 400
+                
+                try:
+                    user.actual_balance += Decimal(str(payment.amount))
+                    print(f"Deposit completed: Added {payment.amount} to user {user.id}")
+                    db.session.commit()
+                    return jsonify({"status": "ok", "message": "Deposit processed"}), 200
+                    
+                except Exception as e:
+                    db.session.rollback()
+                    current_app.logger.error(f"Deposit processing failed: {e}", exc_info=True)
+                    payment.status = PaymentStatus.PENDING.value
+                    db.session.add(payment)
+                    db.session.commit()
+                    return jsonify({"error": "Deposit processing failed"}), 500
+        
+        else:
+            # Handle failed payment
+            print(f"❌ Payment failed with status: {status}")
+            payment.status = PaymentStatus.FAILED.value
+            payment.updated_at = datetime.now(timezone.utc)
+            db.session.commit()
+            return jsonify({"status": "ok", "message": "Payment marked as failed"}), 200
+        
+    except Exception as e:
+        # ✅ FIX 6: Always rollback on exception
+        if payment:
+            db.session.rollback()
+        current_app.logger.error(f"Callback error: {e}", exc_info=True)
+        return jsonify({"error": "Payment processing failed"}), 500
+#=======================================================================================================
+
+
+# ============================================================
+# CONSTANTS
+# ============================================================
+
+# ============================================================
+# PESAJET CONFIG
+# ============================================================
+PESAJET_BASE_URL = "https://payments.pesajet.com"
+PESAJET_REQUEST_TIMEOUT = 60
+
+
+def detect_provider(phone: str) -> str:
+    """Map a Ugandan phone number to a PesaJet provider."""
+    if os.environ.get("PESAJET_SANDBOX") == "1":
+        return "sandbox"
+    p = phone.lstrip("+")
+    if p.startswith(("25677", "25678", "25639", "25676", "25679")):
+        print("MTN detected. Routing to MTN=========")
+        return "mtn"
+    if p.startswith(("25670", "25675", "25674", "25673", "25620")):
+        print("AIRTEL DETECTED: Routing to airtel=========")
+        return "airtel"
+    raise ValueError(f"Cannot determine provider for {phone}")
+
+
+# ============================================================
+# WITHDRAWAL ROUTE - PESAJET INTEGRATION
+# ============================================================
+
+
+@bp.route("/wallet/transfer-locked", methods=["POST"])
+def transfer_locked():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"success": False, "error": "Not authenticated"}), 401
+
+    user = db.session.get(User, user_id)
+    if not user or not user.wallet:
+        return jsonify({"success": False, "error": "Wallet not found"}), 404
+
+    try:
+        now = datetime.now(timezone.utc)
+
+        # ------------------------------------------------------------
+        # 1. Flip any matured locks to unlocked BEFORE querying
+        #    A lock is mature when is_locked=True AND lock_end_date <= now
+        # ------------------------------------------------------------
+        matured = (
+            db.session.query(Package)
+            .filter(
+                Package.user_id == user.id,
+                Package.is_locked == True,
+                Package.lock_end_date.isnot(None),
+                Package.lock_end_date <= now,
+            )
+            .all()
+        )
+        for pkg in matured:
+            pkg.is_locked = False
+            logger.info("🔓 Package %s lock matured — now transferable", pkg.id)
+
+        if matured:
+            db.session.flush()
+
+        # ------------------------------------------------------------
+        # 2. Find mature, untransferred locked packages
+        #    is_locked=False means either "was locked and matured"
+        #    or "never locked". lock_earnings > 0 filters out the latter.
+        # ------------------------------------------------------------
+        mature_packages = (
+            db.session.query(Package)
+            .filter(
+                Package.user_id == user.id,
+                Package.is_locked == False,
+                Package.lock_earnings > 0,
+            )
+            .with_for_update()
+            .all()
+        )
+
+        if not mature_packages:
+            return jsonify({
+                "success": False,
+                "error": (
+                    "No mature locked balance available. "
+                    "Locked earnings can only be transferred after the lock period ends."
+                )
+            }), 400
+
+        # ------------------------------------------------------------
+        # 3. Sum what's transferable
+        # ------------------------------------------------------------
+        total_transferable = sum(
+            (Decimal(str(p.lock_earnings or 0)) for p in mature_packages),
+            Decimal("0"),
+        )
+
+        if total_transferable <= 0:
+            return jsonify({"success": False, "error": "No transferable locked balance"}), 400
+
+        # ------------------------------------------------------------
+        # 4. Sanity guard — wallet vs packages
+        # ------------------------------------------------------------
+        wallet_locked = Decimal(str(user.wallet.locked_balance or 0))
+        if wallet_locked < total_transferable:
+            logger.error(
+                "Locked balance drift: wallet=%s, pkg_sum=%s, user=%s",
+                wallet_locked, total_transferable, user.id,
+            )
+            return jsonify({
+                "success": False,
+                "error": "Balance mismatch detected. Please contact support."
+            }), 500
+
+        # ------------------------------------------------------------
+        # 5. Perform the transfer
+        # ------------------------------------------------------------
+        new_balance = Decimal(str(user.actual_balance or 0)) + total_transferable
+        user.actual_balance = float(new_balance)
+        user.wallet.locked_balance = float(wallet_locked - total_transferable)
+
+        for pkg in mature_packages:
+            pkg.lock_earnings = 0
+            # is_locked already False from step 1
+
+        # ------------------------------------------------------------
+        # 6. Audit trail
+        # ------------------------------------------------------------
+        tx = Transaction(
+            user_id=user.id, 
+            wallet_id=user.wallet.id,       # ← was user.id (bug)
+            type="lock_transfer",
+            amount=float(total_transferable),
+            status="completed",
+            purchase_type=(
+                f"Transferred UGX {total_transferable:,.0f} from "
+                f"{len(mature_packages)} matured locked package(s)"
+            ),
+        )
+        db.session.add(tx)
+        db.session.commit()
+
+        logger.info(
+            "Locked transfer OK: user=%s amount=%s packages=%s",
+            user.id, total_transferable, len(mature_packages),
+        )
+
+        return jsonify({
+            "success": True,
+            "message": f"UGX {total_transferable:,.0f} transferred to deposit balance",
+            "transferred": float(total_transferable),
+            "packages_processed": len(mature_packages),
+            "new_balance": float(new_balance),
+            "new_locked_balance": float(user.wallet.locked_balance),
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.exception("Locked transfer failed: user=%s error=%s", user_id, e)
+        return jsonify({
+            "success": False,
+            "error": "Transfer failed. Please try again."
+        }), 500
+
+@bp.route("/wallet/transfer-locked/<int:package_id>", methods=["POST"])
+def transfer_locked_package(package_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"success": False, "error": "Not authenticated"}), 401
+
+    user = db.session.get(User, user_id)
+    if not user or not user.wallet:
+        return jsonify({"success": False, "error": "Wallet not found"}), 404
+
+    try:
+        # Flip matured locks for this user first (safety)
+        now = datetime.now(timezone.utc)
+        (
+            db.session.query(Package)
+            .filter(
+                Package.user_id == user.id,
+                Package.is_locked == True,
+                Package.lock_end_date.isnot(None),
+                Package.lock_end_date <= now,
+            )
+            .update({"is_locked": False}, synchronize_session=False)
+        )
+
+        # Lock only this package
+        pkg = (
+            db.session.query(Package)
+            .filter(
+                Package.id == package_id,
+                Package.user_id == user.id,
+                Package.is_locked == False,
+                Package.lock_earnings > 0,
+            )
+            .with_for_update()
+            .first()
+        )
+
+        if not pkg:
+            return jsonify({
+                "success": False,
+                "error": "This package is not ready to transfer yet."
+            }), 400
+
+        amount = Decimal(str(pkg.lock_earnings or 0))
+        if amount <= 0:
+            return jsonify({"success": False, "error": "Nothing to transfer"}), 400
+
+        wallet_locked = Decimal(str(user.wallet.locked_balance or 0))
+        if wallet_locked < amount:
+            logger.error(
+                "Locked drift: wallet=%s pkg=%s user=%s pkg_id=%s",
+                wallet_locked, amount, user.id, pkg.id,
+            )
+            return jsonify({
+                "success": False,
+                "error": "Balance mismatch. Contact support."
+            }), 500
+
+        # Move funds
+        new_balance = Decimal(str(user.actual_balance or 0)) + amount
+        user.actual_balance = float(new_balance)
+        user.wallet.locked_balance = float(wallet_locked - amount)
+
+        pkg.lock_earnings = 0
+        pkg.status = "completed"  # or whatever your terminal status is
+
+        tx = Transaction(
+            user_id=user.id, 
+            wallet_id=user.wallet.id,
+            type="lock_transfer",
+            amount=float(amount),
+            status="completed",
+            reference=f"LOCKT-{uuid.uuid4().hex[:12].upper()}",
+            purchase_type=f"LOCK-1PKG",
+        )
+        db.session.add(tx)
+        db.session.commit()
+
+        logger.info(
+            "Per-package locked transfer OK: user=%s pkg=%s amount=%s",
+            user.id, pkg.id, amount,
+        )
+
+        return jsonify({
+            "success": True,
+            "message": f"UGX {amount:,.0f} transferred to deposit balance",
+            "transferred": float(amount),
+            "package_id": pkg.id,
+            "new_balance": float(new_balance),
+            "new_locked_balance": float(user.wallet.locked_balance),
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.exception("Per-package transfer failed: user=%s err=%s", user_id, e)
+        return jsonify({
+            "success": False,
+            "error": "Transfer failed. Please try again."
+        }), 500
+    
+@bp.route("/payments/withdraw", methods=["POST"])
+def withdraw():
+    """
+    Main withdrawal endpoint with PesaJet DISBURSEMENT integration.
+    """
+
+    # ============================================================
+    # 1. GET AND VALIDATE INPUT  (unchanged)
+    # ============================================================
+  
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({"error": "Invalid JSON data"}), 400
+
+    amount = data.get("amount")
+    payment_type = data.get("payment_type", "withdrawal")
+    recipient_phone = data.get("recipient_phone") if payment_type == "send_money" else None
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "User not authenticated"}), 401
+
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    if payment_type == "send_money":
+        phone_number = user.phone
+        if not phone_number:
+            return jsonify({"error": "User does not have a registered phone number"}), 400
+    else:
+        phone_number = data.get("phone") or data.get("phone_number")
+
+    # Idempotency key — reused as PesaJet's idempotencyKey
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if not idempotency_key:
+        import hashlib
+        key_material = f"{session.get('user_id')}:{amount}:{phone_number}:{datetime.now().date()}"
+        idempotency_key = hashlib.sha256(key_material.encode()).hexdigest()
+
+    logger.info(f"Idempotency key: {idempotency_key}")
+    logger.info(f"WITHDRAW PROCESSING STARTED: {data}, {amount}, {phone_number}")
+
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    if payment_type == "send_money" and not recipient_phone:
+        return jsonify({"error": "Recipient phone number required for send money"}), 400
+    if payment_type != "send_money" and not phone_number:
+        return jsonify({"error": "Phone number is required"}), 400
+    if payment_type != "send_money" and not amount:
+        return jsonify({"error": "Amount is required"}), 400
+
+    try:
+        # ============================================================
+        # 2. PROCESS WITHDRAWAL INTERNALLY  (unchanged)
+        # ============================================================
+        amount_decimal = Decimal(str(amount))
+
+        success, message, withdrawal_data = WithdrawalProcessor.process_withdrawal_request(
+            user_id, amount_decimal, phone_number, idempotency_key
+        )
+
+        if not success:
+            return jsonify({"error": message}), 400
+
+        if withdrawal_data.get("already_processed"):
+            return jsonify({
+                "success": True,
+                "message": message,
+                "withdrawal_id": withdrawal_data["reference"],
+                "already_processed": True,
+            }), 200
+                # ============================================================
+        # 2b. ADMIN REVIEW BRANCH  (minimal fix)
+        # ============================================================
+        if amount_decimal > WithdrawalConfig.ADMIN_REVIEW_THRESHOLD:
+            print("Amount for admin approval. sending to admin........")
+            from blueprints.withdraw_helpers import WithdrawalRecordManager
+            WithdrawalRecordManager.update_status(
+                withdrawal_data["withdrawal_id"],
+                "pending_admin",        # new status — admin will resolve
+            )
+            print("Withdrawl sent to admin........pending admin")
+            db.session.commit()
+
+            logger.info(
+                f"Withdrawal {withdrawal_data['reference']} flagged for admin review "
+                f"(amount={amount_decimal} > {WithdrawalConfig.ADMIN_REVIEW_THRESHOLD})"
+            )
+
+            return jsonify({
+                "success": True,
+                "message": "Withdrawal submitted. It will be reviewed and processed shortly.",
+                "withdrawal_id": withdrawal_data["reference"],
+                "reference": withdrawal_data["reference"],
+                "net_amount": str(withdrawal_data.get("net_amount", amount)),
+                "fee": str(withdrawal_data.get("fee", "0")),
+                "status": "pending_admin",
+            }), 200
+        # ============================================================
+        # 3. PREPARE PESAJET PAYLOAD  (CHANGED)
+        # ============================================================
+        merchant_reference = withdrawal_data["reference"]
+        net_amount = withdrawal_data["net_amount"]
+
+        if payment_type == "send_money":
+            target_phone = recipient_phone
+            tag = "send_money"
+            print(f"💰 SENDING MONEY to recipient: {target_phone}")
+        else:
+            target_phone = phone_number
+            tag = "customer_withdraw"
+            print(f"💰 PROCESSING WITHDRAWAL for user: {target_phone}")
+
+        # PesaJet expects canonical +256 format
+        formatted_phone = target_phone.strip()
+        if formatted_phone.startswith("0"):
+            formatted_phone = "+256" + formatted_phone[1:]
+        elif formatted_phone.startswith("+"):
+            pass  # already E.164
+        elif formatted_phone.startswith("256") and len(formatted_phone) == 12:
+            formatted_phone = "+" + formatted_phone
+        else:
+            digits = re.sub(r"\D", "", formatted_phone)
+            if len(digits) >= 9:
+                formatted_phone = "+256" + digits[-9:]
+            else:
+                formatted_phone = "+256" + digits
+
+        # Encode tag into reference (PesaJet reference max 255)
+        reference = f"{merchant_reference}"
+
+        # Detect provider from target phone
+        provider = detect_provider(formatted_phone)
+
+        payload = {
+            "type": "DISBURSEMENT",
+            "amount": int(float(net_amount)),          # min 1
+            "phoneNumber": formatted_phone,            # +256 canonical
+            "provider": provider,                      # mtn | airtel | sandbox
+            "reference": reference,                    # up to 255 chars
+            "idempotencyKey": merchant_reference,      # STABLE per withdrawal
+        }
+
+        print("🔹 PesaJet disbursement payload:", json.dumps(payload, indent=2))
+
+        # ============================================================
+        # 4. CALL PESAJET API  (CHANGED)
+        # ============================================================
+        headers = {
+            "X-API-Key": os.environ.get("PESAJET_API_KEY"),
+            "Content-Type": "application/json",
+        }
+
+        print(f"Calling PesaJet API for withdrawal {merchant_reference}", flush=True)
+
+        response = requests.post(
+            f"{PESAJET_BASE_URL}/api/v1/payments",
+            json=payload,
+            headers=headers,
+            timeout=PESAJET_REQUEST_TIMEOUT,
+        )
+
+        print(f"PesaJet response status: {response.status_code}, body: {response.text}", flush=True)
+        response.raise_for_status()
+        pesajet_data = response.json()
+
+        # ============================================================
+        # 5. PROCESS PESAJET RESPONSE  (CHANGED)
+        # ============================================================
+        transaction_id = pesajet_data.get("transactionId")
+
+        if transaction_id:
+            from blueprints.withdraw_helpers import WithdrawalRecordManager
+            WithdrawalRecordManager.update_status(
+                withdrawal_data["withdrawal_id"],
+                "processing",
+                external_ref=transaction_id,
+            )
+            db.session.commit()
+
+            return jsonify({
+                "success": True,
+                "message": "Withdrawal request submitted successfully",
+                "withdrawal_id": merchant_reference,
+                "reference": merchant_reference,
+                "external_reference": transaction_id,
+                "net_amount": str(withdrawal_data.get("net_amount", amount)),
+                "fee": str(withdrawal_data.get("fee", "0")),
+                "status": (pesajet_data.get("status") or "PENDING").lower(),
+            }), 200
+        else:
+            # 2xx but no transaction id — treat as failure
+            error_msg = pesajet_data.get("message", "Disbursement not accepted")
+            logger.error(f"PesaJet withdrawal not accepted: {error_msg}")
+
+            WithdrawalProcessor.fail_withdrawal(
+                withdrawal_data["withdrawal_id"],
+                user_id,
+                amount_decimal,
+                withdrawal_data.get("balances", {}),
+            )
+
+            return jsonify({
+                "success": False,
+                "error": error_msg,
+                "details": "Your funds have been refunded. Please try again.",
+            }), 400
+
+    # ============================================================
+    # 6. ERROR HANDLING  (CHANGED)
+    # ============================================================
+    except requests.exceptions.HTTPError as e:
+        status_code = None
+        error_message = "Disbursement provider error"
+
+        if e.response is not None:
+            status_code = e.response.status_code
+            try:
+                body = e.response.json()
+                # Handle both shapes: {error:{...}} (docs) and {message, error, statusCode} (real)
+                if isinstance(body.get("error"), dict):
+                    error_message = body["error"].get("message") or str(body)
+                else:
+                    error_message = body.get("message") or body.get("error") or e.response.text
+            except Exception:
+                error_message = e.response.text
+
+        print(f"🔥 PesaJet disbursement HTTP error: {status_code} {error_message}", flush=True)
+
+        # ============================================================
+        # ⚠️ SAFETY: only refund on CLIENT errors (4xx), NOT on timeout/5xx.
+        # A 5xx or timeout could mean the payout actually went out.
+        # Instead mark PENDING_VERIFICATION and reconcile later.
+        # ============================================================
+        if status_code and 400 <= status_code < 500 and status_code != 409:
+            # Genuine client error — safe to refund
+            if "withdrawal_data" in locals():
+                WithdrawalProcessor.fail_withdrawal(
+                    withdrawal_data["withdrawal_id"],
+                    user_id,
+                    amount_decimal,
+                    withdrawal_data.get("balances", {}),
+                )
+            return jsonify({
+                "error": error_message,
+                "details": "Your funds have been refunded. Please try again.",
+            }), status_code
+
+        # 409: idempotency conflict — the original transaction exists; fetch it
+        if status_code == 409:
+            return jsonify({
+                "error": "Duplicate withdrawal detected",
+                "details": "This withdrawal was already submitted. Check status before retrying.",
+            }), 409
+
+        # 5xx / timeout / unknown — do NOT refund; verify first
+        if "withdrawal_data" in locals():
+            from blueprints.withdraw_helpers import WithdrawalRecordManager
+            WithdrawalRecordManager.update_status(
+                withdrawal_data["withdrawal_id"],
+                "pending_verification",  # add this status if not present
+            )
+            db.session.commit()
+
+        return jsonify({
+            "error": "Disbursement status uncertain",
+            "details": "We could not confirm the payout. It will be verified automatically.",
+        }), 502
+
+    except requests.exceptions.RequestException as e:
+        # Network error / timeout — same caution as above
+        print(f"PesaJet network error: {str(e)}", flush=True)
+
+        if "withdrawal_data" in locals():
+            from blueprints.withdraw_helpers import WithdrawalRecordManager
+            WithdrawalRecordManager.update_status(
+                withdrawal_data["withdrawal_id"],
+                "pending_verification",
+            )
+            db.session.commit()
+
+        return jsonify({
+            "error": "Disbursement status uncertain",
+            "details": "We could not confirm the payout. It will be verified automatically.",
+        }), 502
+
+    except WithdrawalException as e:
+        print(f"Withdrawal processing error: {str(e)}", flush=True)
+        return jsonify({"error": str(e)}), 400
+
+    except Exception as e:
+        print(f"Unexpected error in withdrawal: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
+
+        if "withdrawal_data" in locals():
+            WithdrawalProcessor.fail_withdrawal(
+                withdrawal_data["withdrawal_id"],
+                user_id,
+                amount_decimal,
+                withdrawal_data.get("balances", {}),
+            )
+
+        return jsonify({
+            "error": "Withdrawal processing failed",
+            "details": "Your funds have been refunded. Please try again.",
+        }), 500
+
+# ============================================================
+# WITHDRAWAL CALLBACK - LIVEPAY
+# ============================================================
+@bp.route("/payments/withdrawal-callback", methods=['POST'])
+def withdrawal_callback():
+    """
+    Handle LivePay withdrawal callback/webhook
+    """
+    
+    print("=" * 60)
+    print("📞 WITHDRAWAL CALLBACK RECEIVED")
+    print("=" * 60)
+    
+    try:
+        # Get callback data
+        data = request.get_json(silent=True) or {}
+        print(f"Callback data: {json.dumps(data, indent=2)}")
+        
+        if not data:
+            return jsonify({"error": "No data received"}), 400
+        
+        # ============================================================
+        # 1. EXTRACT LIVEPAY DATA
+        # ============================================================
+        # Handle both possible structures
+        reference = data.get("reference") or data.get("customer_reference")
+        ext_uuid = data.get("internal_reference")
+        
+        # Determine success status
+        success = data.get("success", False)
+        status_text = data.get("status", "").lower()
+        
+        if status_text in ["success", "successful", "completed", "complete", "paid", "confirmed"]:
+            success = True
+            print(f"✅ Status indicates SUCCESS: {status_text}")
+        elif status_text in ["failed", "cancelled", "expired", "rejected"]:
+            success = False
+            print(f"❌ Status indicates FAILURE: {status_text}")
+
+        else:
+            # Fallback to 'success' field if present
+            success = data.get("success", False)
+            print(f"⚠️ Unknown status '{status_text}', using success field: {success}")
+        
+        network = data.get("network") or data.get("provider")
+        amount = data.get("amount")
+        phone = data.get("msisdn") or data.get("phone_number")
+        
+        print(f"✅ Success: {success}")
+        print(f"📌 Reference: {reference}")
+        print(f"📌 Internal Reference: {ext_uuid}")
+        print(f"📌 Network: {network}")
+        print(f"📌 Phone: {phone}")
+        print(f"📌 Amount: {amount}")
+        print(f"📌 Status: {status_text}")
+        
+        if not reference and not ext_uuid:
+            return jsonify({"error": "Missing reference"}), 400
+        
+        # ============================================================
+        # 2. FIND WITHDRAWAL RECORD
+        # ============================================================
+        withdrawal = None
+        
+        if reference:
+            withdrawal = Withdrawal.query.filter_by(reference=reference).first()
+        
+        if not withdrawal and ext_uuid:
+            withdrawal = Withdrawal.query.filter_by(external_ref=ext_uuid).first()
+        
+        # Fallback: search by reference in external_ref or raw_response
+        if not withdrawal and reference:
+            withdrawal = Withdrawal.query.filter_by(external_ref=reference).first()
+        
+        if not withdrawal and reference:
+            withdrawals = Withdrawal.query.filter(
+                Withdrawal.raw_response.isnot(None),
+                Withdrawal.raw_response.contains(reference)
+            ).all()
+            if withdrawals:
+                withdrawal = withdrawals[0]
+                print(f"✅ Found withdrawal via raw_response search: {withdrawal.id}")
+        
+        if not withdrawal:
+            print(f"❌ No matching withdrawal for reference {reference} / {ext_uuid}")
+            return jsonify({"status": "ignored"}), 200
+        
+        print(f"✅ Found withdrawal ID: {withdrawal.id}, Current status: {withdrawal.status}")
+        
+        # ============================================================
+        # 3. PREVENT DUPLICATE PROCESSING
+        # ============================================================
+        if withdrawal.status in ['completed', 'failed', 'cancelled']:
+            print(f"⚠️ Withdrawal already processed: {withdrawal.reference}")
+            return jsonify({"status": "already_processed"}), 200
+        
+        # ============================================================
+        # 4. PROCESS SUCCESSFUL WITHDRAWAL
+        # ============================================================
+        if success:
+            withdrawal.status = "completed"
+            withdrawal.completed_at = datetime.now(timezone.utc)
+            withdrawal.external_ref = ext_uuid or withdrawal.external_ref
+            withdrawal.raw_response = json.dumps(data)
+            
+            db.session.commit()
+            
+            print(f"✅ Withdrawal {withdrawal.id} completed successfully")
+            
+            # Create notification for user
+            try:
+                notification = Notification(
+                    user_id=withdrawal.user_id,
+                    message=f"Withdrawal of {withdrawal.net_amount:,.0f} UGX completed successfully. Reference: {withdrawal.reference}",
+                    notification_type='withdrawal_completed',
+                    is_read=False
+                )
+                db.session.add(notification)
+                db.session.commit()
+            except Exception as notif_error:
+                logger.error(f"Failed to create notification: {notif_error}")
+            
+            return jsonify({
+                "status": "ok",
+                "message": "Withdrawal completed",
+                "withdrawal_id": withdrawal.id,
+                "reference": withdrawal.reference
+            }), 200
+        
+        # ============================================================
+        # 5. PROCESS FAILED WITHDRAWAL
+        # ============================================================
+        else:
+            print(f"❌ Withdrawal failed - Status: {status_text}")
+            
+            # Get user for refund
+            user = db.session.get(User, withdrawal.user_id)
+            
+            # Refund the user
+            if user:
+                from blueprints.withdraw_helpers import BalanceManager
+                refund_success = BalanceManager.refund_withdrawal(user, {
+                    "actual_deducted": str(withdrawal.actual_balance_deducted),
+                    "wallet_deducted": str(withdrawal.wallet_balance_deducted)
+                })
+                print(f"Refund successful: {refund_success}")
+            
+            # Update withdrawal status
+            withdrawal.status = "failed"
+            withdrawal.updated_at = datetime.now(timezone.utc)
+            withdrawal.raw_response = json.dumps(data)
+            
+            if data.get("message"):
+                withdrawal.failure_reason = data.get("message")
+            
+            db.session.commit()
+            
+            print(f"❌ Withdrawal {withdrawal.id} marked as failed and refunded")
+            
+            # Create notification for user
+            try:
+                notification = Notification(
+                    user_id=withdrawal.user_id,
+                    message=f"Withdrawal failed: {data.get('message', 'Unknown error')}. Your funds have been refunded.",
+                    notification_type='withdrawal_failed',
+                    is_read=False
+                )
+                db.session.add(notification)
+                db.session.commit()
+            except Exception as notif_error:
+                logger.error(f"Failed to create notification: {notif_error}")
+            
+            return jsonify({
+                "status": "ok",
+                "message": "Withdrawal marked as failed",
+                "withdrawal_id": withdrawal.id,
+                "reference": withdrawal.reference
+            }), 200
+    
+    except Exception as e:
+        logger.error(f"Withdrawal callback error: {e}", exc_info=True)
+        print(f"❌ Callback error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Internal server error"}), 500
+# MARZ_BASE_URL = 'https://wallet.wearemarz.com/api/v1'
+# #=================================================================================================================
+# @bp.route("/payments/withdraw/", methods=["POST"])
+# def withdraw_():
+#     """
+#     Main withdrawal endpoint with LivePay integration
+#     """
+    
+#     data = request.get_json(force=True, silent=True)
+#     amount = data.get("amount")
+#     payment_type = data.get("payment_type", "withdrawal")
+#     recipient_phone = data.get("recipient_phone") if payment_type == "send_money" else None
+#     phone_number = None
+
+#     # Authentication
+#     user_id = session.get("user_id")
+#     if not user_id:
+#         return jsonify({"error": "User not authenticated"}), 401
+    
+#     user = db.session.get(User, user_id)
+#     if not user:
+#         return jsonify({"error": "User not found"}), 404
+    
+#     # Determine phone number
+#     if payment_type == "send_money":
+#         phone_number = user.phone
+#         if not phone_number:
+#             return jsonify({"error": "User does not have a registered phone number"}), 400
+#     else:
+#         phone_number = data.get("phone") or data.get("phone_number")
+
+#     # Generate idempotency key
+#     idempotency_key = request.headers.get('Idempotency-Key')
+#     if not idempotency_key:
+#         import hashlib
+#         key_material = f"{session.get('user_id')}:{amount}:{phone_number}:{datetime.now().date()}"
+#         idempotency_key = hashlib.sha256(key_material.encode()).hexdigest()
+    
+#     logger.info(f"The Idempotency key is {idempotency_key}")
+#     logger.info(f"WITHDRAW PROCESSING STARTED: {data}, {amount}, {phone_number}")
+
+#     # Validation
+#     if not request.is_json:
+#         return jsonify({"error": "Request must be JSON"}), 400
+    
+#     if payment_type == "send_money" and not recipient_phone:
+#         return jsonify({"error": "Recipient phone number required for send money"}), 400  
+      
+#     if payment_type != "send_money" and not phone_number:
+#         return jsonify({"error": "Phone number is required"}), 400
+    
+#     if payment_type != "send_money" and not amount:
+#         return jsonify({"error": "Amount is required"}), 400
+
+#     try:
+#         # Step 1: Process withdrawal internally (validate, deduct balances, create record)
+#         amount_decimal = Decimal(str(amount))
+#         success, message, withdrawal_data = WithdrawalProcessor.process_withdrawal_request(
+#             user_id, amount_decimal, phone_number, idempotency_key
+#         )
+        
+#         if not success:
+#             return jsonify({"error": message}), 400
+        
+#         if withdrawal_data.get('already_processed'):
+#             return jsonify({
+#                 "success": True,
+#                 "message": message,
+#                 "withdrawal_id": withdrawal_data['reference'],
+#                 "already_processed": True
+#             }), 200
+        
+#         # ============================================================
+#         # STEP 2: SEND TO LIVEPAY (REPLACING MARZPAY)
+#         # ============================================================
+#         merchant_reference = withdrawal_data['reference']
+#         net_amount = withdrawal_data['net_amount']
+        
+#         # Determine phone and description
+#         if payment_type == "send_money":
+#             livepay_phone = recipient_phone
+#             description = "send_money"
+#             print(f"💰 SENDING MONEY to recipient: {livepay_phone}")
+#         else:
+#             livepay_phone = phone_number
+#             description = "customer_withdraw"
+#             print(f"💰 PROCESSING WITHDRAWAL for user: {livepay_phone}")
+        
+#         # Format phone for LivePay (without +)
+#         formatted_phone = livepay_phone.strip()
+#         if formatted_phone.startswith('0'):
+#             formatted_phone = "256" + formatted_phone[1:]
+#         elif formatted_phone.startswith('+'):
+#             formatted_phone = formatted_phone[1:]
+#         elif formatted_phone.startswith('256') and len(formatted_phone) == 12:
+#             pass  # Already correct
+#         else:
+#             # Extract last 9 digits
+#             digits = re.sub(r'\D', '', formatted_phone)
+#             if len(digits) >= 9:
+#                 formatted_phone = "256" + digits[-9:]
+#             else:
+#                 formatted_phone = "256" + digits
+        
+#         # LivePay callback URL
+#         CALL_BACK_URL = "https://nexa-co.online/payments/withdrawal-callback"
+        
+#         # Build LivePay payload
+#         payload = {
+#             "accountNumber": os.environ.get('LIVEPAY_ACCOUNT_NUMBER'),
+#             "phoneNumber": formatted_phone,
+#             "amount": int(float(net_amount)),
+#             "currency": "UGX",
+#             "reference": merchant_reference[:30].replace(" ", ""),
+#             "description": description[:50]
+#         }
+        
+#         print("🔹 LivePay payload:", json.dumps(payload, indent=2))
+        
+#         # Call LivePay API
+#         headers = {
+#             "Authorization": f"Bearer {os.environ.get('LIVEPAY_API_KEY')}",
+#             "Content-Type": "application/json"
+#         }
+        
+#         print(f"Calling LivePay API for withdrawal {merchant_reference}", flush=True)
+#         response = requests.post(
+#             f"{LIVEPAY_BASE_URL}/send-money",
+#             json=payload,
+#             headers=headers,
+#             timeout=60
+#         )
+        
+#         print(f"LivePay response status: {response.status_code}, body: {response.text}", flush=True)
+#         response.raise_for_status()
+#         livepay_data = response.json()
+        
+#         # ============================================================
+#         # STEP 3: PROCESS LIVEPAY RESPONSE
+#         # ============================================================
+#         if livepay_data.get("success"):
+#             from blueprints.withdraw_helpers import WithdrawalRecordManager
+#             WithdrawalRecordManager.update_status(
+#                 withdrawal_data['withdrawal_id'], 
+#                 "processing",
+#                 external_ref=livepay_data.get("internal_reference")
+#             )
+#             db.session.commit()
+            
+#             return jsonify({
+#                 "success": True,
+#                 "message": "Withdrawal request submitted successfully",
+#                 "withdrawal_id": merchant_reference,
+#                 "reference": merchant_reference,
+#                 "external_reference": livepay_data.get("internal_reference"),
+#                 "net_amount": str(withdrawal_data.get('net_amount', amount)),
+#                 "fee": str(withdrawal_data.get('fee', '0')),
+#                 "status": "processing",
+#                 "livepay_response": livepay_data
+#             }), 200
+#         else:
+#             # LivePay returned failure
+#             error_msg = livepay_data.get("message", "Unknown error")
+#             logger.error(f"LivePay withdrawal failed: {error_msg}")
+            
+#             WithdrawalProcessor.fail_withdrawal(
+#                 withdrawal_data['withdrawal_id'],
+#                 user_id,
+#                 amount_decimal,
+#                 withdrawal_data.get('balances', {})
+#             )
+            
+#             return jsonify({"error": f"Withdrawal failed: {error_msg}"}), 400
+
+#     except requests.exceptions.RequestException as e:
+#         print(f"LivePay request error: {str(e)}", flush=True)
+        
+#         # Parse error
+#         error_msg = "Payment gateway temporarily unavailable"
+#         if e.response:
+#             try:
+#                 error_json = e.response.json()
+#                 error_msg = error_json.get("error", error_json.get("message", str(e)))
+#             except:
+#                 error_msg = e.response.text or str(e)
+        
+#         # Reverse the withdrawal since LivePay failed
+#         if 'withdrawal_data' in locals():
+#             WithdrawalProcessor.fail_withdrawal(
+#                 withdrawal_data['withdrawal_id'],
+#                 user_id,
+#                 amount_decimal,
+#                 withdrawal_data.get('balances', {})
+#             )
+        
+#         return jsonify({
+#             "error": error_msg,
+#             "details": "Your funds have been refunded. Please try again later."
+#         }), 502
+        
+#     except WithdrawalException as e:
+#         print(f"Withdrawal processing error: {str(e)}", flush=True)
+#         return jsonify({"error": str(e)}), 400
+        
+#     except Exception as e:
+#         print(f"Unexpected error in withdrawal: {str(e)}", flush=True)
+        
+#         # Attempt to reverse on any unexpected error
+#         if 'withdrawal_data' in locals():
+#             WithdrawalProcessor.fail_withdrawal(
+#                 withdrawal_data['withdrawal_id'],
+#                 user_id,
+#                 amount_decimal,
+#                 withdrawal_data.get('balances', {})
+#             )
+        
+#         return jsonify({
+#             "error": "Withdrawal processing failed",
+#             "details": "Your funds have been refunded. Please try again."
+#         }), 500
+
+
+
+# @bp.route("/payments/withdraw", methods=["POST"])
+# def withdraw():
+#     """
+#     Main withdrawal endpoint with MarzPay integration
+#     """
+ 
+#     data = request.get_json(force=True, silent=True)
+#     amount = data.get("amount")
+  
+#     payment_type = data.get("payment_type", "withdrawal")
+#     recipient_phone = data.get("recipient_phone") if payment_type == "send_money" else None
+
+#     phone_number = None
+
+#     user_id = session.get("user_id")
+#     if not user_id:
+#         return jsonify({"error": "User not authenticated"}), 401
+    
+#     user = db.session.get(User, user_id)
+#     if not user:
+#         return jsonify({"error": "User not found"}), 404
+    
+#     if payment_type == "send_money":
+#         phone_number = user.phone
+#         if not phone_number:
+#             return jsonify({"error": "User does not have a registered phone number"}), 400
+#     else:
+#         phone_number = data.get("phone") or data.get("phone_number")
+
+#     idempotency_key = request.headers.get('Idempotency-Key')
+#     if not idempotency_key:
+#         import hashlib
+#         key_material = f"{session.get('user_id')}:{amount}:{phone_number}:{datetime.now().date()}"
+#         idempotency_key = hashlib.sha256(key_material.encode()).hexdigest()
+#     logger.info(f"The Idempotency key is {idempotency_key}")
+#     print("MOBILE DEBUG:", request.headers)
+#     print("BODY:", request.data)
+#     logger.info(f"WITHDRAW PROCESSING STARTED: {data}, {amount}, {phone_number}")
+
+
+#     if not request.is_json:
+#         return jsonify({"error": "Request must be JSON"}), 400
+    
+#     if payment_type == "send_money" and not recipient_phone:
+#         return jsonify({"error": "Recipient phone number required for send money"}), 400  
+      
+#     if payment_type != "send_money" and not phone_number:
+#         return jsonify({"error": "Phone number is required"}), 400
+    
+#     if payment_type != "send_money" and not amount:
+#         return jsonify({"error": "Amount is required"}), 400
+
+#     user_id = session.get("user_id")
+#     if not user_id:
+#         return jsonify({"error": "User not authenticated"}), 401
+
+#     try:
+#         # Convert amount to Decimal for processing
+#         amount_decimal = Decimal(str(amount))
+        
+#         # Step 1: Process withdrawal internally (validate, deduct balances, create record)
+#         success, message, withdrawal_data = WithdrawalProcessor.process_withdrawal_request(
+#             user_id, amount_decimal, phone_number, idempotency_key
+#         )
+        
+#         if not success:
+#             return jsonify({"error": message}), 400
+        
+#         if withdrawal_data.get('already_processed'):
+#             return jsonify({
+#                 "success": True,
+#                 "message": message,
+#                 "withdrawal_id": withdrawal_data['reference'],
+#                 "already_processed": True
+#             }), 200
+        
+       
+#         merchant_reference = withdrawal_data['reference'] 
+#         amount = withdrawal_data['net_amount']
+        
+#         CALL_BACK_URL = "https://nexa-co.online/withdraw/callback" #'https://bedfast-kamron-nondeclivitous.ngrok-free.dev/payments/callback' 
+#         if payment_type == "send_money":
+#             marzpay_phone = recipient_phone
+#             description = "send_money"
+#             print(f"💰 SENDING MONEY to recipient: {marzpay_phone}")
+#         else:
+#             marzpay_phone = phone_number  # Use user's own phone
+#             description = "customer_withdraw"
+#             print(f"💰 PROCESSING WITHDRAWAL for user: {marzpay_phone}")
+        
+#         formatted_phone = marzpay_phone.strip()
+#         if formatted_phone.startswith('0'):
+#             formatted_phone = f"+256{formatted_phone[1:]}"
+#         elif formatted_phone.startswith('256'):
+#             formatted_phone = f"+{formatted_phone}"
+#         elif not formatted_phone.startswith('+'):
+#             formatted_phone = f"+256{formatted_phone[-9:]}"
+        
+#         payload = {
+#             "reference": withdrawal_data['reference'],
+#             "amount":  withdrawal_data['net_amount'],                                                  #int(amount), 
+#             "phone_number": formatted_phone,  
+#             "country": "UG",
+#             "description": "customer_withdraw",
+#             "callback_url": CALL_BACK_URL,
+#         }
+
+#         if payment_type == "send_money":
+#             payload["metadata"] = {
+#                 "payment_type": "send_money",
+#                 "recipient_name": data.get("recipient_name", ""),
+#                 "sender_id": user_id
+#             }
+            
+#         print("🔹 MarzPay payload:", json.dumps(payload, indent=2))
+#         headers = {
+#             "Authorization": f"Basic {os.environ.get('MARZ_AUTH_HEADER')}",
+#             "Content-Type": "application/json"
+#         }
+
+#         # Step 3: Call MarzPay API
+#         print(f"Calling MarzPay API for withdrawal {merchant_reference}", flush=True)
+#         response = requests.post(
+#             f"{MARZ_BASE_URL}/send-money", 
+#             json=payload, 
+#             headers=headers, 
+#             timeout=60
+#         )
+        
+#         print(f"MarzPay response status: {response.status_code}, body: {response.text}", flush=True)
+#         response.raise_for_status()
+#         marz_data = response.json()
+
+#         # Step 4: Update withdrawal status based on MarzPay response
+#         transaction_status = marz_data.get('data', {}).get('transaction', {}).get('status')
+#         transaction_uuid = marz_data.get('data', {}).get('transaction', {}).get('uuid')  #marz_data.get('data', {}).get('transaction', {}).get('uuid')
+#         if transaction_status in ['pending', 'processing']:
+#             from blueprints.withdraw_helpers import WithdrawalRecordManager
+#             WithdrawalRecordManager.update_status(
+#                 withdrawal_data['withdrawal_id'], 
+#                 "processing",  
+#                 external_ref=transaction_uuid
+#             )
+#             db.session.commit()
+            
+#             return jsonify({
+#                 "success": True,
+#                 "message": "Withdrawal request submitted successfully",
+#                 "withdrawal_id": merchant_reference,
+#                 "marz_response": marz_data,
+#                 "net_amount": str(withdrawal_data.get('net_amount', amount)),
+#                 "fee": str(withdrawal_data.get('fee', '0'))
+#             }), 200
+#         elif transaction_status == 'failed':
+#             # Immediate failure - rare but possible
+#             WithdrawalProcessor.fail_withdrawal(
+#                 withdrawal_data['withdrawal_id'],
+#                 user_id,
+#                 amount_decimal,
+#                 withdrawal_data.get('balances', {})
+#             )
+#             return jsonify({"error": "Withdrawal failed"}), 400
+#         else:
+#             # MarzPay returned non-success status
+#             raise Exception(f"MarzPay returned status: {marz_data.get('status')}")
+
+#     except requests.exceptions.RequestException as e:
+#         print(f"MarzPay request error: {str(e)}", flush=True)
+        
+#         # Reverse the withdrawal since MarzPay failed
+#         if 'withdrawal_data' in locals():
+#             WithdrawalProcessor.fail_withdrawal(
+#                 withdrawal_data['withdrawal_id'],
+#                 user_id,
+#                 amount_decimal,
+#                 withdrawal_data.get('balances', {})
+#             )
+        
+#         return jsonify({
+#             "error": "Payment gateway temporarily unavailable",
+#             "details": "Your funds have been refunded. Please try again later."
+#         }), 502
+        
+#     except WithdrawalException as e:
+#         print(f"Withdrawal processing error: {str(e)}", flush=True)
+#         return jsonify({"error": str(e)}), 400
+        
+#     except Exception as e:
+#         print(f"Unexpected error in withdrawal: {str(e)}", flush=True)
+        
+#         # Attempt to reverse on any unexpected error
+#         if 'withdrawal_data' in locals():
+#             WithdrawalProcessor.fail_withdrawal(
+#                 withdrawal_data['withdrawal_id'],
+#                 user_id,
+#                 amount_decimal,
+#                 withdrawal_data.get('balances', {})
+#             )
+        
+#         return jsonify({
+#             "error": "Withdrawal processing failed",
+#             "details": "Your funds have been refunded. Please try again."
+#         }), 500
+    
+#=================================================================================================
+#=================================================================================================
+
+import logging
+from flask import request, jsonify
+from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
+#===================================================================================================
+@bp.route("/withdraw/callback/", methods=["POST"])
+def withdraw_callback_():
+    print("MARZ WITHDRAW CALLBACK RECEIVED")
+    
+    try:
+        data = request.get_json()
+        print(f"RAW CALLBACK DATA: {json.dumps(data, indent=2)}")
+        if not data:
+            return jsonify({"error": "No data received"}), 400
+        
+        # EXACT SAME LOGIC AS PAYMENT CALLBACK
+        transaction = data.get("transaction", {})
+        
+        # Get references - SAME AS PAYMENT
+        reference = (
+            transaction.get("reference") or
+            data.get("reference")  
+        )
+        provider_reference = data.get("provider_reference") or transaction.get("provider_reference")
+
+        ext_uuid = transaction.get("uuid") or data.get("uuid")
+        
+        status = transaction.get("status", "").lower()
+        print(f"🔄 MARZ WITHDRAW STATUS: {status}")
+        print(f"🔍 Checking references: reference={reference}, ext_uuid={ext_uuid}")
+
+        # SIMPLE SEARCH - SAME AS PAYMENT
+        withdrawal = None
+        
+        # Try by reference (your UUID) first
+        if reference:
+            withdrawal = Withdrawal.query.filter_by(reference=reference).first()
+            if withdrawal:
+                print(f"✅ Found withdrawal by reference: {reference}")
+        
+        # Try by external UUID
+        if not withdrawal and ext_uuid:
+            withdrawal = Withdrawal.query.filter_by(external_ref=ext_uuid).first()
+            if withdrawal:
+                print(f"✅ Found withdrawal by external UUID: {ext_uuid}")
+
+        if not withdrawal and provider_reference:
+            withdrawal = Withdrawal.query.filter_by(reference=provider_reference).first()
+            if withdrawal:
+                print(f"✅ Found withdrawal by provider_reference: {provider_reference}")
+        
+        if not withdrawal:
+            print(f"❌ No withdrawal found for reference={reference}")
+            return jsonify({"status": "ignored"}), 200
+    
+        print(f"🎯 Processing withdrawal ID: {withdrawal.id}, current status: {withdrawal.status}")
+        
+        # Store MarzPay's reference if we don't have it
+        if not withdrawal.external_ref and ext_uuid:
+            withdrawal.external_ref = ext_uuid
+            db.session.commit()
+            print(f"💾 Stored external_ref: {ext_uuid}")
+        
+        # Process status (your existing logic)
+        if withdrawal.status in ["completed", "failed"]:
+            print(f"⏭️ Withdrawal {withdrawal.id} already {withdrawal.status}. Skipping.")
+            return jsonify({"status": "ok"}), 200
+        
+        if status == 'completed':
+            print(f"✅ Completing withdrawal ID: {withdrawal.id}")
+            WithdrawalProcessor.complete_withdrawal(withdrawal.id, reference or ext_uuid)
+        
+        elif status in ['failed', 'rejected']:
+            print(f"❌ Failing withdrawal ID: {withdrawal.id}")
+
+            actual_deducted = withdrawal.actual_balance_deducted
+            wallet_deducted = withdrawal.wallet_balance_deducted
+            balance_details = {
+                'actual_deducted': str(actual_deducted) if actual_deducted is not None else '0',
+                'wallet_deducted': str(wallet_deducted) if wallet_deducted is not None else '0'
+            }
+            amount_decimal = Decimal(str(withdrawal.amount))
+
+            print(f"   📊 Balance details for refund: {balance_details}")
+            print(f"   💰 Amount (Decimal): {amount_decimal}")
+            print(f"   👤 User ID: {withdrawal.user_id}")
+            print(f"   📝 Withdrawal ID: {withdrawal.id}")
+            WithdrawalProcessor.fail_withdrawal(withdrawal.id, withdrawal.user_id, amount_decimal, balance_details)
+            print(f"✅ Withdrawal {withdrawal.id} marked as failed and refund initiated")
+        
+        return jsonify({"status": "callback processed"}), 200
+
+    except Exception as e:
+        print(f"💥 Error processing MarzPay callback: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Callback processing failed"}), 500
+    
+    # except Exception as e:
+    #     print(f"💥 Error processing MarzPay callback: {e}")
+    #     return jsonify({"error": "Callback processing failed"}), 500
+
+#===============================================================================================================
+
+@bp.route("/payments/withdraw/history", methods=["GET"])
+def withdrawal_history():
+    """
+    Get user's withdrawal history
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "User not authenticated"}), 401
+    
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        withdrawals = WithdrawalQueryHelper.get_user_withdrawals(user_id, limit)
+        
+        withdrawal_list = []
+        for withdrawal in withdrawals:
+            withdrawal_list.append({
+                'id': withdrawal.id,
+                'amount': str(withdrawal.amount),
+                'net_amount': str(withdrawal.net_amount) if withdrawal.net_amount else None,
+                'fee': str(withdrawal.fee) if withdrawal.fee else None,
+                'phone': withdrawal.phone,
+                'status': withdrawal.status,
+                'external_ref': withdrawal.external_ref,
+                'external_txid': withdrawal.external_txid,
+                'created_at': withdrawal.created_at.isoformat() if withdrawal.created_at else None,
+                'updated_at': withdrawal.updated_at.isoformat() if withdrawal.updated_at else None
+            })
+        
+        return jsonify({
+            "success": True,
+            "withdrawals": withdrawal_list,
+            "total": len(withdrawal_list)
+        }), 200
+        
+    except Exception as e:
+        print(f"Error fetching withdrawal history: {str(e)}", flush=True)
+        return jsonify({"error": "Failed to fetch withdrawal history"}), 500
+
+
+@bp.route("/payments/withdraw/limits", methods=["GET"])
+def withdrawal_limits():
+    """
+    Get withdrawal limits and configuration
+    """
+    return jsonify({
+        "success": True,
+        "limits": {
+            "min_withdrawal": str(WithdrawalConfig.MIN_WITHDRAWAL),
+            "max_withdrawal": str(WithdrawalConfig.MAX_WITHDRAWAL),
+            "processing_fee_percent": str(WithdrawalConfig.PROCESSING_FEE_PERCENT),
+            "hold_period_hours": WithdrawalConfig.HOLD_PERIOD_HOURS
+        }
+    }), 200
+
+
+@bp.route("/payments/withdraw/<withdrawal_id>", methods=["GET"])
+def get_withdrawal_status(withdrawal_id):
+    """
+    Get specific withdrawal status
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "User not authenticated"}), 401
+    
+    try:
+        withdrawal = Withdrawal.query.filter_by(
+            id=withdrawal_id, 
+            user_id=user_id
+        ).first()
+        
+        if not withdrawal:
+            return jsonify({"error": "Withdrawal not found"}), 404
+        
+        return jsonify({
+            "success": True,
+            "withdrawal": {
+                'id': withdrawal.id,
+                'amount': str(withdrawal.amount),
+                'net_amount': str(withdrawal.net_amount) if withdrawal.net_amount else None,
+                'fee': str(withdrawal.fee) if withdrawal.fee else None,
+                'phone': withdrawal.phone,
+                'status': withdrawal.status,
+                'external_ref': withdrawal.external_ref,
+                'external_txid': withdrawal.external_txid,
+                'created_at': withdrawal.created_at.isoformat() if withdrawal.created_at else None,
+                'updated_at': withdrawal.updated_at.isoformat() if withdrawal.updated_at else None
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error fetching withdrawal status: {str(e)}", flush=True)
+        return jsonify({"error": "Failed to fetch withdrawal status"}), 500
+
+#==================================================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+# #======================================================================================================
+# #
+# #   PAYMENT API BLUEPRINT - UNIFIED GATEWAY (Pesapal + MarzPay)
+# #
+# #===========================================================================================================
+# from flask import Blueprint, request, jsonify, current_app, session, url_for, redirect
+# import uuid                                                                              
+# from models import Payment, PaymentStatus, User, Withdrawal, PackageCatalog, Package, Referral, Bonus, ReferralBonus, TransactionType                    
+# from sqlalchemy.exc import IntegrityError                             
+# from sqlalchemy import select                                          
+# from sqlalchemy.orm import Session   
+# import re  
+# import json
+# from sqlalchemy import and_
+# import requests 
+# from extensions import db
+# import os
+# from datetime import datetime, timedelta, timezone
+# import base64
+# import logging
+# import uuid
+# from decimal import Decimal
+# from blueprints.payments_helpers import (
+#     MARZ_BASE_URL,
+#     validate_payment_input, 
+#     handle_existing_payment,
+#     create_payment_record, 
+#     send_to_marzpay,
+#     initiate_payment,  # UNIFIED payment function (uses Pesapal by default)
+#     check_package_funds_availability,
+#     PRIMARY_GATEWAY,
+#     PESAPAL_ENVIRONMENT
+# )
+# from models import Transaction, Notification
+# from decimal import Decimal
+# from .withdraw_helpers import (
+#     WithdrawalProcessor, 
+#     WithdrawalQueryHelper,
+#     WithdrawalConfig,
+#     WithdrawalException
+# )
+
+# bp = Blueprint("payments", __name__) 
+
+# logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# # ============================================================
+# # MAIN PAYMENT INITIATION ENDPOINT (UPDATED)
+# # ============================================================
+
+# @bp.route("/payments/initiate", methods=['POST'])
+# def initiate_payment_route():
+#     """Main payment initiation endpoint - uses unified gateway"""
+#     print("=" * 80)
+#     print(f"🔵 PAYMENT INITIATION STARTED (Gateway: {PRIMARY_GATEWAY})")
+#     print("=" * 80)
+    
+#     try:
+#         # 1. Authentication
+#         print("🔍 Step 1: Authenticating user...")
+#         user = get_authenticated_user()
+#         if not user:
+#             print("❌ Authentication failed")
+#             return jsonify({"error": "Unauthorized"}), 401
+#         print(f"✅ User authenticated: ID={user.id}")
+        
+#         # 2. Get and validate data
+#         print("🔍 Step 2: Getting JSON data...")
+#         data = request.get_json()
+#         if not data:
+#             return jsonify({"error": "Invalid JSON"}), 400
+        
+#         print(f"📥 Data received: {data}")
+        
+#         print("🔍 Step 3: Validating input...")
+#         validated, error = validate_payment_input(data)
+#         if error:
+#             print(f"❌ Validation failed: {error}")
+#             return error
+#         print(f"✅ Validation successful")
+        
+#         # 3. Route to appropriate payment handler
+#         payment_method = validated.get("payment_method", "mobile")
+#         utility_code = validated.get("utility_code", "")
+#         payment_type = validated.get("payment_type", "")
+        
+#         print(f"🔍 Step 4: Routing payment (type={payment_type}, method={payment_method})")
+        
+#         # Special case: Media Star (uses internal wallet)
+#         if utility_code == 'MEDIA_STAR' or validated.get("payment_type") == "media_star":
+#             print("🔀 Routing to MEDIA_STAR handler")
+#             return handle_media_star_payment(user, validated)
+        
+#         # Card payments (Pesapal supports card natively)
+#         elif payment_method == "card":
+#             print("🔀 Routing to CARD handler (Pesapal)")
+#             return handle_card_payment(user, validated)
+        
+#         # Package payments (primary flow)
+#         elif validated["payment_type"] == "package":
+#             print("🔀 Routing to PACKAGE handler")
+#             return handle_package_payment(user, validated)
+        
+#         # Deposit payments
+#         elif validated["payment_type"] == "deposit":
+#             print("🔀 Routing to DEPOSIT handler")
+#             return handle_deposit_payment(user, validated)
+        
+#         else:
+#             print(f"❌ Invalid payment type: {validated.get('payment_type')}")
+#             return jsonify({"error": "Invalid payment type"}), 400
+            
+#     except KeyError as e:
+#         print(f"❌ KeyError: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({"error": f"Missing required field: {e}"}), 400
+#     except Exception as e:
+#         db.session.rollback()
+#         print(f"❌ EXCEPTION: {type(e).__name__}: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({"error": "Payment processing failed"}), 500
+
+# # ============================================================
+# # PACKAGE PAYMENT HANDLER (UPDATED TO USE UNIFIED GATEWAY)
+# # ============================================================
+
+# def handle_package_payment(user, validated):
+#     """Handle package purchase payment using unified gateway"""
+#     print("=" * 60)
+#     print("📦 PACKAGE PAYMENT - STARTED")
+#     print("=" * 60)
+    
+#     try:
+#         amount = validated["amount"]
+#         phone = validated["phone"]
+#         package_obj = validated.get("package_obj")
+#         payment_type = validated.get("payment_type", "package")
+#         payment_method = validated.get("payment_method", "mobile")
+        
+#         print(f"📦 Package: {package_obj.name if package_obj else 'Unknown'}")
+#         print(f"💰 Amount: {amount}")
+#         print(f"📱 Phone: {phone}")
+#         print(f"🌐 Gateway: {PRIMARY_GATEWAY}")
+        
+#         # Check if user has funds in wallet (optional: use wallet balance first)
+#         has_funds, message, total_available = check_package_funds_availability(user.id, Decimal(str(amount)))
+        
+#         # If user has sufficient funds, deduct from wallet (skip external payment)
+#         if has_funds:
+#             print(f"💰 User has sufficient funds: {total_available}")
+#             # Process using internal wallet
+#             return process_wallet_package_payment(user, package_obj, amount)
+        
+#         print(f"💰 Insufficient funds: {message}")
+#         print("📤 Initiating external payment via PRIMARY_GATEWAY")
+        
+#         # Check for existing pending payment
+#         existing = handle_existing_payment(user, amount, payment_type)
+#         if existing:
+#             print(f"⚠️ Found existing pending payment: {existing.id}")
+#             # If it's Pesapal payment, return existing redirect URL
+#             if existing.provider == 'pesapal' and existing.raw_response:
+#                 try:
+#                     raw_data = json.loads(existing.raw_response)
+#                     return jsonify({
+#                         "success": True,
+#                         "message": "Payment already initiated",
+#                         "data": {
+#                             "redirect_url": raw_data.get('redirect_url'),
+#                             "payment_id": existing.id,
+#                             "reference": existing.reference,
+#                             "status": existing.status
+#                         }
+#                     }), 200
+#                 except:
+#                     pass
+            
+#             return jsonify({
+#                 "success": False,
+#                 "message": "Payment already pending. Please wait.",
+#                 "data": {"payment_id": existing.id}
+#             }), 409
+        
+#         # Use unified payment function (Pesapal by default)
+#         result, error = initiate_payment(
+#             user=user,
+#             amount=amount,
+#             phone=phone,
+#             package=package_obj,
+#             payment_type=payment_type,
+#             payment_method=payment_method
+#         )
+        
+#         if error:
+#             print(f"❌ Payment initiation failed: {error}")
+#             return jsonify({"error": error.get("error", "Payment failed")}), 400
+        
+#         print(f"✅ Payment initiated successfully")
+#         print(f"📤 Result: {result}")
+        
+#         # Determine response format based on gateway
+#         if result.get('redirect_url'):
+#             # Pesapal flow - return redirect URL
+#             return jsonify({
+#                 "success": True,
+#                 "message": "Payment initiated. Redirect to payment gateway.",
+#                 "data": {
+#                     "redirect_url": result['redirect_url'],
+#                     "payment_id": result['payment_id'],
+#                     "reference": result.get('reference'),
+#                     "order_tracking_id": result.get('order_tracking_id'),
+#                     "gateway": PRIMARY_GATEWAY
+#                 }
+#             }), 200
+#         else:
+#             # MarzPay or direct response
+#             return jsonify({
+#                 "success": True,
+#                 "message": "Payment initiated successfully",
+#                 "data": {
+#                     "payment_id": result.get('payment_id'),
+#                     "reference": result.get('reference'),
+#                     "status": result.get('status'),
+#                     "gateway": PRIMARY_GATEWAY
+#                 }
+#             }), 200
+            
+#     except Exception as e:
+#         db.session.rollback()
+#         print(f"❌ Package payment error: {str(e)}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({"error": f"Package payment failed: {str(e)}"}), 500
+
+# # ============================================================
+# # CARD PAYMENT HANDLER (UPDATED FOR PESAPAL)
+# # ============================================================
+
+# def handle_card_payment(user, validated):
+#     """Handle card payment using Pesapal (native card support)"""
+#     print("=" * 60)
+#     print("💳 CARD PAYMENT - STARTED")
+#     print("=" * 60)
+    
+#     try:
+#         amount = validated["amount"]
+#         phone = validated["phone"]
+#         payment_type = validated.get("payment_type", "deposit")
+        
+#         print(f"💰 Amount: {amount}")
+#         print(f"📱 Phone: {phone}")
+#         print(f"🌐 Gateway: {PRIMARY_GATEWAY}")
+        
+#         # Check if user has sufficient funds (skip if deposit)
+#         if payment_type == "package":
+#             has_funds, message, total_available = check_package_funds_availability(user.id, Decimal(str(amount)))
+#             if has_funds:
+#                 # Use wallet instead of card
+#                 return jsonify({
+#                     "error": "You have sufficient wallet balance. Please use wallet payment.",
+#                     "available_balance": str(total_available)
+#                 }), 400
+        
+#         # Use unified payment function with card method
+#         # Pesapal supports card natively
+#         result, error = initiate_payment(
+#             user=user,
+#             amount=amount,
+#             phone=phone,
+#             package=validated.get("package_obj"),
+#             payment_type=payment_type,
+#             payment_method="card"
+#         )
+        
+#         if error:
+#             print(f"❌ Card payment initiation failed: {error}")
+#             return jsonify({"error": error.get("error", "Card payment failed")}), 400
+        
+#         print(f"✅ Card payment initiated successfully")
+        
+#         if result.get('redirect_url'):
+#             return jsonify({
+#                 "success": True,
+#                 "message": "Card payment initiated. Redirect to secure payment page.",
+#                 "data": {
+#                     "redirect_url": result['redirect_url'],
+#                     "payment_id": result['payment_id'],
+#                     "reference": result.get('reference'),
+#                     "gateway": PRIMARY_GATEWAY
+#                 }
+#             }), 200
+#         else:
+#             return jsonify({
+#                 "success": True,
+#                 "message": "Card payment initiated",
+#                 "data": result
+#             }), 200
+            
+#     except Exception as e:
+#         db.session.rollback()
+#         print(f"❌ Card payment error: {str(e)}")
+#         return jsonify({"error": f"Card payment failed: {str(e)}"}), 500
+
+# # ============================================================
+# # DEPOSIT PAYMENT HANDLER (UPDATED FOR PESAPAL)
+# # ============================================================
+
+# def handle_deposit_payment(user, validated):
+#     """Handle deposit using unified gateway"""
+#     print("=" * 60)
+#     print("💰 DEPOSIT PAYMENT - STARTED")
+#     print("=" * 60)
+    
+#     try:
+#         amount = validated["amount"]
+#         phone = validated["phone"]
+#         payment_method = validated.get("payment_method", "mobile")
+        
+#         print(f"💰 Amount: {amount}")
+#         print(f"📱 Phone: {phone}")
+#         print(f"🌐 Gateway: {PRIMARY_GATEWAY}")
+        
+#         # Use unified payment function
+#         result, error = initiate_payment(
+#             user=user,
+#             amount=amount,
+#             phone=phone,
+#             package=None,
+#             payment_type="deposit",
+#             payment_method=payment_method
+#         )
+        
+#         if error:
+#             print(f"❌ Deposit initiation failed: {error}")
+#             return jsonify({"error": error.get("error", "Deposit failed")}), 400
+        
+#         print(f"✅ Deposit initiated successfully")
+        
+#         if result.get('redirect_url'):
+#             return jsonify({
+#                 "success": True,
+#                 "message": "Deposit initiated. Redirect to payment gateway.",
+#                 "data": {
+#                     "redirect_url": result['redirect_url'],
+#                     "payment_id": result['payment_id'],
+#                     "reference": result.get('reference'),
+#                     "gateway": PRIMARY_GATEWAY
+#                 }
+#             }), 200
+#         else:
+#             return jsonify({
+#                 "success": True,
+#                 "message": "Deposit initiated successfully",
+#                 "data": result
+#             }), 200
+            
+#     except Exception as e:
+#         db.session.rollback()
+#         print(f"❌ Deposit error: {str(e)}")
+#         return jsonify({"error": f"Deposit failed: {str(e)}"}), 500
+
+# # ============================================================
+# # WALLET PAYMENT (INTERNAL - NO EXTERNAL GATEWAY)
+# # ============================================================
+
+# def process_wallet_package_payment(user, package_obj, amount):
+#     """Process package payment using internal wallet balance (no external gateway)"""
+#     print("=" * 60)
+#     print("💰 WALLET PACKAGE PAYMENT - STARTED")
+#     print("=" * 60)
+    
+#     try:
+#         # Deduct from user's wallet (actual balance)
+#         from blueprints.withdraw_helpers import WithdrawalValidator
+        
+#         mature_wallet = WithdrawalValidator._get_mature_wallet_balance(user)
+#         actual_balance = Decimal(str(user.actual_balance or 0))
+        
+#         # Calculate how much to deduct from each
+#         amount_to_deduct = Decimal(str(amount))
+        
+#         # Deduct from actual balance first
+#         if actual_balance >= amount_to_deduct:
+#             user.actual_balance = float(actual_balance - amount_to_deduct)
+#             deducted_from = "actual_balance"
+#         else:
+#             # Deduct remaining from mature wallet
+#             remaining = amount_to_deduct - actual_balance
+#             user.actual_balance = 0
+#             # Deduct from mature wallet (need to implement if you track mature wallet separately)
+#             # For now, just deduct from actual balance since mature wallet is tracked differently
+#             user.actual_balance = float(actual_balance - amount_to_deduct)
+#             deducted_from = "combined_balance"
+        
+#         # Create payment record
+#         payment = Payment(
+#             user_id=user.id,
+#             reference=str(uuid.uuid4()),
+#             amount=amount,
+#             currency="UGX",
+#             phone_number=user.phone or "wallet",
+#             provider="wallet",
+#             status=PaymentStatus.COMPLETED.value,
+#             method="Wallet",
+#             external_ref=str(uuid.uuid4()),
+#             payment_type="package",
+#             transaction_type=TransactionType.PACKAGE,
+#             package_catalog_id=package_obj.id,
+#             verified=True,
+#             raw_response=json.dumps({
+#                 "wallet_payment": True,
+#                 "deducted_from": deducted_from,
+#                 "previous_balance": float(actual_balance + mature_wallet)
+#             })
+#         )
+#         db.session.add(payment)
+#         db.session.flush()
+        
+#         # Activate the package
+#         from blueprints.payments_helpers import activate_user_package
+#         activated = activate_user_package(user.id, package_obj.id)
+        
+#         if activated:
+#             db.session.commit()
+#             print(f"✅ Wallet payment successful: Package {package_obj.name} activated")
+            
+#             return jsonify({
+#                 "success": True,
+#                 "message": f"Package {package_obj.name} activated successfully using wallet balance",
+#                 "data": {
+#                     "payment_id": payment.id,
+#                     "reference": payment.reference,
+#                     "package": package_obj.name,
+#                     "amount": str(amount),
+#                     "new_balance": float(user.actual_balance or 0)
+#                 }
+#             }), 200
+#         else:
+#             db.session.rollback()
+#             return jsonify({"error": "Failed to activate package"}), 500
+            
+#     except Exception as e:
+#         db.session.rollback()
+#         print(f"❌ Wallet payment error: {str(e)}")
+#         return jsonify({"error": f"Wallet payment failed: {str(e)}"}), 500
+
+# # ============================================================
+# # MEDIA STAR PAYMENT HANDLER (UNCHANGED)
+# # ============================================================
+
+# def handle_media_star_payment(user, validated):
+#     """Handle Media Star payment (internal wallet)"""
+#     # Your existing media_star handling code
+#     # This typically uses internal wallet, not external gateway
+#     # ... existing code ...
+#     pass
+
+# # ============================================================
+# # CALLBACK ENDPOINT (UPDATED FOR PESAPAL)
+# # ============================================================
+
+# @bp.route("/payments/callback", methods=['GET', 'POST'])
+# def payment_callback():
+#     """
+#     Unified callback handler for all payment gateways
+#     Handles:
+#     - Pesapal IPN (POST with JSON)
+#     - Pesapal redirect (GET with OrderTrackingId)
+#     - MarzPay callback (GET or POST)
+#     """
+#     print("=" * 60)
+#     print("📞 PAYMENT CALLBACK RECEIVED")
+#     print(f"Method: {request.method}")
+#     print(f"Headers: {dict(request.headers)}")
+#     print("=" * 60)
+    
+#     try:
+#         # For Pesapal IPN (POST with JSON body)
+#         if request.method == 'POST' and request.is_json:
+#             data = request.get_json()
+#             print(f"📥 IPN Data: {json.dumps(data, indent=2)}")
+            
+#             # Check if it's Pesapal IPN
+#             if data and 'OrderTrackingId' in data:
+#                 from blueprints.payments_helpers import handle_pesapal_ipn
+#                 response, status_code = handle_pesapal_ipn(data)
+#                 return jsonify(response), status_code
+            
+#             # Check if it's MarzPay callback
+#             elif data and 'transaction_id' in data:
+#                 # Handle MarzPay callback
+#                 return handle_marzpay_callback(data)
+        
+#         # For Pesapal redirect (GET with query parameters)
+#         elif request.method == 'GET':
+#             order_tracking_id = request.args.get('OrderTrackingId')
+#             merchant_reference = request.args.get('OrderMerchantReference')
+            
+#             if order_tracking_id:
+#                 print(f"🔄 Pesapal redirect received: tracking={order_tracking_id}, ref={merchant_reference}")
+#                 from blueprints.payments_helpers import handle_pesapal_ipn
+                
+#                 data = {
+#                     'OrderTrackingId': order_tracking_id,
+#                     'OrderMerchantReference': merchant_reference
+#                 }
+#                 response, status_code = handle_pesapal_ipn(data)
+                
+#                 # Return a user-friendly page (optional)
+#                 return """
+#                 <html>
+#                     <head><title>Payment Processing</title></head>
+#                     <body>
+#                         <h2>Payment is being processed</h2>
+#                         <p>Your payment has been received. You will be redirected shortly.</p>
+#                         <p>Order Reference: {}</p>
+#                         <p>Tracking ID: {}</p>
+#                         <script>
+#                             setTimeout(function() {{
+#                                 window.location.href = '/dashboard';
+#                             }}, 3000);
+#                         </script>
+#                     </body>
+#                 </html>
+#                 """.format(merchant_reference or 'N/A', order_tracking_id), 200
+            
+#             # Handle MarzPay callback (GET)
+#             status = request.args.get('status')
+#             reference = request.args.get('reference')
+#             if status and reference:
+#                 return handle_marzpay_callback({
+#                     'status': status,
+#                     'reference': reference,
+#                     'transaction_id': request.args.get('transaction_id')
+#                 })
+        
+#         return jsonify({"error": "Unsupported callback type"}), 400
+        
+#     except Exception as e:
+#         logger.error(f"Callback processing error: {str(e)}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({"error": "Callback processing failed"}), 500
+
+# # ============================================================
+# # MARZPAY CALLBACK HANDLER (LEGACY)
+# # ============================================================
+
+# def handle_marzpay_callback(data):
+#     """Handle MarzPay callback (legacy)"""
+#     # Your existing MarzPay callback handling code
+#     # ... existing code ...
+#     return jsonify({"status": "OK"}), 200
+
+# # ============================================================
+# # PAYMENT STATUS ENDPOINT (UPDATED FOR PESAPAL)
+# # ============================================================
+
+# @bp.route("/payments/status/<reference>", methods=['GET'])
+# def get_payment_status(reference):
+#     """Get payment status by reference"""
+#     print(f"🔍 Checking payment status for reference: {reference}")
+    
+#     try:
+#         payment = Payment.query.filter_by(reference=reference).first()
+#         if not payment:
+#             return jsonify({"error": "Payment not found"}), 404
+        
+#         # If Pesapal payment, query fresh status
+#         if payment.provider == 'pesapal' and payment.external_ref:
+#             from blueprints.payments_helpers import _pesapal_client, activate_user_package
+            
+#             status_data, error = _pesapal_client.get_transaction_status(payment.external_ref)
+#             if not error:
+#                 pesapal_status = status_data.get('payment_status_description', '').upper()
+                
+#                 if pesapal_status == 'COMPLETED' and payment.status != PaymentStatus.COMPLETED.value:
+#                     payment.status = PaymentStatus.COMPLETED.value
+#                     payment.verified = True
+                    
+#                     # Activate package if applicable
+#                     if payment.package_catalog_id:
+#                         activate_user_package(payment.user_id, payment.package_catalog_id)
+                    
+#                     db.session.commit()
+#                     print(f"✅ Payment status updated to COMPLETED")
+        
+#         # Build response
+#         response = {
+#             "reference": payment.reference,
+#             "status": payment.status,
+#             "amount": str(payment.amount),
+#             "currency": payment.currency,
+#             "provider": payment.provider or PRIMARY_GATEWAY,
+#             "method": payment.method,
+#             "verified": payment.verified,
+#             "created_at": payment.created_at.isoformat() if payment.created_at else None,
+#             "updated_at": payment.updated_at.isoformat() if hasattr(payment, 'updated_at') and payment.updated_at else None
+#         }
+        
+#         # Add external tracking if available
+#         if payment.external_ref:
+#             response["external_ref"] = payment.external_ref
+        
+#         return jsonify(response), 200
+        
+#     except Exception as e:
+#         logger.error(f"Status check error: {str(e)}")
+#         return jsonify({"error": "Status check failed"}), 500
+
+# # ============================================================
+# # PAYMENT CONFIGURATION ENDPOINT
+# # ============================================================
+
+# @bp.route("/payments/config", methods=['GET'])
+# def get_payment_config():
+#     """Get payment gateway configuration for frontend"""
+#     return jsonify({
+#         "primary_gateway": PRIMARY_GATEWAY,
+#         "environment": PESAPAL_ENVIRONMENT,
+#         "supported_methods": ["mobile", "card"] if PRIMARY_GATEWAY == 'pesapal' else ["mobile"],
+#         "supports_redirect": PRIMARY_GATEWAY == 'pesapal',
+#         "supports_ipn": PRIMARY_GATEWAY == 'pesapal'
+#     }), 200
+
+# # ============================================================
+# # HELPER FUNCTIONS
+# # ============================================================
+
+# def get_authenticated_user():
+#     """Get authenticated user from session"""
+#     user_id = session.get("user_id")
+#     if not user_id:
+#         return None
+#     return User.query.get(user_id)
+
+# def get_callback_url():
+#     """Get appropriate callback URL based on environment"""
+#     from flask import current_app
+    
+#     if current_app.config.get('DEBUG'):
+#         ngrok_url = os.environ.get('NGROK_URL')
+#         if ngrok_url:
+#             return f"{ngrok_url}/payments/callback"
+#         return None
+#     else:
+#         return "https://super-kash.com/payments/callback"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# # #======================================================================================================
+# # #
+# # #   PAYMENT API BLUEPRINT FOR MARZ PAYMENT GATEWAY INTEGRATION
+# # #
+# # #===========================================================================================================
+# # from flask import Blueprint, request, jsonify, current_app, session, url_for, current_app, redirect                                                                  # HTTP client to call Marz
+# # import uuid                                                                              
+# # from models import Payment, PaymentStatus, User, Withdrawal, PackageCatalog, User, Package, Referral, Bonus, ReferralBonus                    
+# # from sqlalchemy.exc import IntegrityError                             
+# # from sqlalchemy import select                                          
+# # from sqlalchemy.orm import Session   
+# # import re  
+# # import json
+# # from sqlalchemy import and_
+# # import requests 
+# # from extensions import db
+# # import os
+# # from datetime import datetime, timedelta, timezone
+# # import base64
+# # import logging
+# # import uuid
+# # from decimal import Decimal
+# # from blueprints.payments_helpers import MARZ_BASE_URL
+# # import sys
+# # from flask import Blueprint, request, jsonify, session, Blueprint
+# # from blueprints.payments_helpers import  (validate_payment_input, handle_existing_payment,
+# #     create_payment_record, send_to_marzpay
+# # )
+# # from blueprints.payments_helpers import check_package_funds_availability
+# # from models import Transaction, Notification
+# # from decimal import Decimal
+# # from .withdraw_helpers import (
+# #     WithdrawalProcessor, 
+# #     WithdrawalQueryHelper,
+# #     WithdrawalConfig,
+# #     WithdrawalException
+# # )
+
+
+# # bp = Blueprint("payments", __name__) 
+
+# # logger = logging.getLogger(__name__)
+
+# # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# # #=============================================================================================
+# # #      PAYMENT INITIATION ENDPOINT
+# # #============================================================================================
+       
+
+# # @bp.route("/payments/initiate", methods=['POST'])
+# # def initiate_payment():
+# #     """Main payment initiation endpoint - orchestrates all payment types"""
+# #     print("=" * 80)
+# #     print("🔵 PAYMENT INITIATION STARTED")
+# #     print("=" * 80)
+# #     print("PAYMENT DATA RECEIVED: Processing Payment!")
+    
+# #     try:
+# #         # 1. Authentication & Validation
+# #         print("🔍 Step 1: Authenticating user...")
+# #         user = get_authenticated_user()
+# #         if not user:
+# #             print("❌ Authentication failed - No user found")
+# #             return jsonify({"error": "Unauthorized"}), 401
+# #         print(f"✅ User authenticated: ID={user.id}, Username={user.username if hasattr(user, 'username') else 'N/A'}")
+        
+# #         print("🔍 Step 2: Getting JSON data...")
+# #         data = request.get_json()
+# #         if not data:
+# #             print("❌ No JSON data received")
+# #             return jsonify({"error": "Invalid JSON"}), 400
+# #         print(f"✅ Data received: {data}")
+        
+# #         print("🔍 Step 3: Validating input...")
+# #         validated, error = validate_payment_input(data)
+# #         if error:
+# #             print(f"❌ Validation failed: {error}")
+# #             return error
+# #         print(f"✅ Validation successful: {validated}")
+        
+# #         # 2. Route to appropriate payment handler
+# #         payment_method = validated.get("payment_method", "marz")
+# #         utility_code = validated.get("utility_code", "")
+# #         payment_type = validated.get("payment_type", "")
+        
+# #         print(f"🔍 Step 4: Routing payment...")
+# #         print(f"   - payment_method: {payment_method}")
+# #         print(f"   - utility_code: {utility_code}")
+# #         print(f"   - payment_type: {payment_type}")
+        
+# #         #if payment_type == "media_star" or validated.get("utility_code") == "MEDIA_STAR":
+# #         if utility_code == 'MEDIA_STAR' or validated.get("payment_type") == "media_star":
+# #             print("🔀 Routing to MEDIA_STAR handler")
+# #             result = handle_media_star_payment(user, validated)
+# #             print(f"📤 Result from media_star: {result}")
+# #             return result
+        
+# #         elif payment_method == "card":
+# #             print("🔀 Routing to CARD handler")
+# #             result = handle_card_payment(user, validated)
+# #             print(f"📤 Result from card: {result}")
+# #             return result
+            
+# #         elif validated["payment_type"] == "package":
+# #             print("🔀 Routing to PACKAGE handler")
+# #             print("=" * 60)
+# #             print("📦 PACKAGE PAYMENT FLOW STARTED")
+# #             print("=" * 60)
+# #             result = handle_package_payment(user, validated)
+# #             print(f"📤 Result from package handler: {result}")
+# #             print("=" * 60)
+# #             print("📦 PACKAGE PAYMENT FLOW COMPLETED")
+# #             print("=" * 60)
+# #             return result
+            
+# #         elif validated["payment_type"] == "deposit":
+# #             print("🔀 Routing to DEPOSIT handler")
+# #             result = handle_deposit_payment(user, validated)
+# #             print(f"📤 Result from deposit: {result}")
+# #             return result
+# #         else:
+# #             print(f"❌ Invalid payment type: {validated.get('payment_type')}")
+# #             return jsonify({"error": "Invalid payment type"}), 400
+            
+# #     except KeyError as e:
+# #         print(f"❌ KeyError: {e}")
+# #         import traceback
+# #         traceback.print_exc()
+# #         return jsonify({"error": f"Missing required field: {e}"}), 400
+# #     except Exception as e:
+# #         db.session.rollback()
+# #         print(f"❌ EXCEPTION in initiate_payment: {type(e).__name__}: {e}")
+# #         print(f"❌ Exception details:")
+# #         import traceback
+# #         traceback.print_exc()
+# #         return jsonify({"error": "Payment processing failed"}), 500
+
+# # # ============================================================
+# # # HELPER FUNCTIONS
+# # # ============================================================
+
+# # def get_authenticated_user():
+# #     """Get authenticated user from session"""
+# #     user_id = session.get("user_id")
+# #     if not user_id:
+# #         return None
+# #     return User.query.get(user_id)
+
+
+# # def handle_card_payment(user, validated):
+# #     """Handle card payment flow using MarzPay card API"""
+# #     print("=" * 60)
+# #     print("💳 CARD PAYMENT INITIATION STARTED")
+# #     print("=" * 60)
+    
+# #     amount = validated["amount"]
+# #     unique_ref = str(uuid.uuid4())
+    
+# #     # Create payment record
+# #     payment = create_payment_record(
+# #         user=user, amount=amount, phone=None,
+# #         payment_type='card', package=None
+        
+# #     )
+    
+# #     if not payment:
+# #         return jsonify({"error": "Failed to create payment record"}), 500
+    
+# #     db.session.commit()
+# #     print(f"✅ Payment record created - ID: {payment.id}")
+    
+# #     # Call MarzPay
+# #     marz_response = call_marz_card_api(amount, unique_ref)
+    
+# #     if not marz_response or marz_response.get('status') != 'success':
+# #         return handle_card_payment_failure(payment, marz_response)
+    
+# #     # Validate and update
+# #     if not validate_marz_card_response(marz_response):
+# #         return handle_card_payment_failure(payment, marz_response, "Invalid response structure")
+    
+# #     # Update payment with MarzPay data
+# #     update_payment_with_marz_data(payment, marz_response, amount)
+    
+# #     print("🎉 CARD PAYMENT INITIATION COMPLETED SUCCESSFULLY")
+    
+# #     return jsonify({
+# #         "success": True,
+# #         "reference": payment.reference,
+# #         "status": "pending",
+# #         "payment_type": "card",
+# #         "redirect_url": marz_response['data']['redirect_url'],
+# #         "message": "Redirect customer to card payment gateway"
+# #     }), 200
+# # #=============================================================================================
+# # def user_has_any_package(user_id: int) -> bool:
+# #     """Check if user has ever purchased any package"""
+# #     from models import Package
+# #     return Package.query.filter_by(user_id=user_id).first() is not None
+
+# # #=============================================================================================
+# # def handle_package_payment(user, validated):
+# #     """Handle package purchase (internal balance or external)"""
+# #     print("=" * 80)
+# #     print("🔵 [handle_package_payment] ENTERED")
+# #     print("=" * 80)
+# #     print(f"📋 User ID: {user.id}")
+# #     print(f"📋 Validated data: {validated}")
+    
+# #     try:
+# #         amount = validated["amount"]
+# #         phone = validated["phone"]
+# #         package_obj = validated.get("package_obj")
+        
+# #         print(f"🔍 Extracted values:")
+# #         print(f"   Amount: {amount}")
+# #         print(f"   Phone: {phone}")
+# #         print(f"   Package object: {package_obj}")
+        
+# #         if not package_obj:
+# #             print("❌ Package object not found in validated data")
+# #             print(f"   Validated keys: {validated.keys()}")
+# #             return jsonify({"error": "Package not found"}), 400
+        
+# #         print(f"✅ Package found: ID={package_obj.id}, Name={package_obj.name}, Amount={package_obj.amount}")
+        
+# #         print("🔍 Step 1: Checking funds availability...")
+# #         from blueprints.payments_helpers import check_package_funds_availability
+        
+# #         try:
+# #             has_funds, funds_msg, total_available = check_package_funds_availability(user.id, package_obj.amount)
+# #             print(f"✅ Funds check result:")
+# #             print(f"   has_funds: {has_funds}")
+# #             print(f"   funds_msg: {funds_msg}")
+# #             print(f"   total_available: {total_available}")
+# #         except Exception as e:
+# #             print(f"❌ Exception in check_package_funds_availability: {type(e).__name__}: {e}")
+# #             import traceback
+# #             traceback.print_exc()
+# #             # Continue with external payment if funds check fails
+# #             has_funds = False
+# #             funds_msg = f"Funds check failed: {str(e)}"
+        
+# #         print("🔍 Step 2: Routing payment...")
+# #         # Check if user has sufficient balance
+# #         if has_funds:
+# #             print("💰 Balance sufficient - Routing to INTERNAL payment")
+# #             print("   Calling process_internal_package_payment()...")
+# #             try:
+# #                 result = process_internal_package_payment(user, package_obj)
+# #                 print(f"📤 Internal payment returned: {result}")
+# #                 return result
+# #             except Exception as e:
+# #                 print(f"❌ Exception in process_internal_package_payment: {type(e).__name__}: {e}")
+# #                 import traceback
+# #                 traceback.print_exc()
+# #                 # Fallback to external if internal fails
+# #                 print("⚠️ Falling back to external payment")
+# #                 print("   Calling process_external_package_payment()...")
+# #                 result = process_external_package_payment(user, amount, phone, package_obj)
+# #                 print(f"📤 External payment returned: {result}")
+# #                 return result
+# #         else:
+# #             print("💳 Insufficient balance - Routing to EXTERNAL payment")
+# #             print("   Funds message:", funds_msg)
+# #             print("   Calling process_external_package_payment()...")
+# #             try:
+# #                 result = process_external_package_payment(user, amount, phone, package_obj)
+# #                 print(f"📤 External payment returned: {result}")
+# #                 return result
+# #             except Exception as e:
+# #                 print(f"❌ Exception in process_external_package_payment: {type(e).__name__}: {e}")
+# #                 import traceback
+# #                 traceback.print_exc()
+# #                 return jsonify({"error": f"External payment failed: {str(e)}"}), 500
+                
+# #     except KeyError as e:
+# #         print(f"❌ KeyError in handle_package_payment: Missing key {e}")
+# #         import traceback
+# #         traceback.print_exc()
+# #         return jsonify({"error": f"Missing required field: {e}"}), 400
+# #     except Exception as e:
+# #         print(f"❌❌❌ UNEXPECTED EXCEPTION in handle_package_payment: {type(e).__name__}: {e}")
+# #         import traceback
+# #         traceback.print_exc()
+# #         return jsonify({"error": f"Payment processing failed: {str(e)}"}), 500
+# # # #=============================================================================================
+
+
+
+# # def handle_deposit_payment(user, validated):
+# #     """Handle mobile money deposit"""
+# #     amount = validated["amount"]
+# #     phone = validated["phone"]
+    
+# #     # Check for existing payment
+# #     existing_response = handle_existing_payment(user, amount, "deposit")
+# #     if existing_response:
+# #         return existing_response
+    
+# #     # Create payment record
+# #     payment = create_payment_record(user, amount, phone, "deposit")
+# #     if not payment:
+# #         return jsonify({"error": "Failed to create payment record"}), 500
+    
+# #     # Call MarzPay mobile money API
+# #     marz_data, error = send_to_marzpay(payment, phone, amount)
+# #     if error:
+# #         payment.status = PaymentStatus.FAILED.value
+# #         db.session.commit()
+# #         return jsonify(error), 502
+    
+# #     db.session.commit()
+    
+# #     return jsonify({
+# #         "reference": payment.reference,
+# #         "status": payment.status,
+# #         "payment_type": "deposit",
+# #         "checkout_url": marz_data.get("pop_up_info"),
+# #         "message": "Deposit initiated successfully"
+# #     }), 200
+# # #=============================================================================
+# # # HANDLE MEDIA STAR PAYMENT==================================================
+# # #============================================================================
+# # def handle_media_star_payment(user, validated):
+# #     """Handle Media Star TV subscription payment"""
+# #     from blueprints.payments_helpers import check_bill_funds_availability
+# #     print("=" * 60)
+# #     print("📺 MEDIA STAR PAYMENT INITIATION")
+# #     print("=" * 60)
+    
+# #     amount = Decimal(str(validated["amount"]))
+# #     phone = validated["phone"]
+# #     serial_number = validated["serial_number"]
+# #     package_code = validated["package_code"]
+# #     package_name = validated["package_name"]
+# #     service_charge = validated.get("service_charge", 1500)
+# #     total_amount = amount + Decimal(str(service_charge))
+    
+# #     # Check if user has sufficient funds (actual balance + mature wallet)
+# #     has_funds, funds_msg, total_available = check_bill_funds_availability(
+# #         user.id, total_amount, utility_code='MEDIA_STAR'
+# #     )
+    
+# #     if has_funds:
+# #         # Process using internal balance
+# #         return process_internal_media_star_payment(user, amount, service_charge, phone, serial_number, package_code, package_name)
+# #     else:
+# #         # Process via external MarzPay
+# #         return process_external_media_star_payment(user, amount, service_charge, phone, serial_number, package_code, package_name)
+# # #=========================================================================================
+# # #========================================================================================
+# # def process_internal_media_star_payment(user, amount, service_charge, phone, serial_number, package_code, package_name):
+# #     """Process Media Star payment using internal balance"""
+# #     print("💰 Processing Media Star payment from internal balance")
+    
+# #     from models import Transaction, Notification
+# #     from decimal import Decimal
+# #     import uuid
+# #     from models import TransactionType
+
+# #     total_amount = amount + Decimal(str(service_charge))
+# #     actual_balance = Decimal(str(user.actual_balance or 0))
+    
+# #     try:
+# #         # Deduct from actual balance first
+# #         deduct_from_actual = min(total_amount, actual_balance)
+# #         if deduct_from_actual > 0:
+# #             user.actual_balance -= deduct_from_actual
+        
+# #         # Deduct remaining from wallet
+# #         deduct_from_wallet = total_amount - deduct_from_actual
+# #         if deduct_from_wallet > 0:
+# #             wallet_tx = Transaction(
+# #                 user_id=user.id,
+# #                 wallet_id=user.wallet.id,
+# #                 amount=-deduct_from_wallet,
+# #                 type='media_star_subscription',
+# #                 status='completed',
+# #                 reference=str(uuid.uuid4())
+# #             )
+# #             db.session.add(wallet_tx)
+# #             user.wallet.balance -= deduct_from_wallet
+        
+# #         # Create payment record
+# #         payment = Payment(
+# #             user_id=user.id,
+# #             reference=str(uuid.uuid4()),
+# #             amount=float(total_amount),
+# #             currency="UGX",
+# #             phone_number=phone,
+# #             status=PaymentStatus.COMPLETED.value,
+# #             method="Internal Balance",
+# #             payment_type="media_star",
+# #             transaction_type=TransactionType.DEPOSIT,
+# #             raw_response=json.dumps({
+# #                 "method": "internal_balance",
+# #                 "subscription": package_name,
+# #                 "serial_number": serial_number,
+# #                 "package_code": package_code,
+# #                 "amount": float(amount),
+# #                 "service_charge": float(service_charge)
+# #             })
+# #         )
+# #         db.session.add(payment)
+        
+# #         # Create notification
+# #         notification = Notification(
+# #             user_id=user.id,
+# #             message=f"Media Star TV subscription '{package_name}' purchased successfully! Amount: {amount:,.0f} UGX + {service_charge:,.0f} UGX service charge.",
+# #             notification_type='bill_payment',
+# #             is_read=False
+# #         )
+# #         db.session.add(notification)
+        
+# #         db.session.commit()
+        
+# #         # TODO: Call Media Star API to activate subscription
+# #         # await_activate_media_star_subscription(phone, serial_number, package_code)
+        
+# #         return jsonify({
+# #             "success": True,
+# #             "status": "success",
+# #             "reference": payment.reference,
+# #             "payment_type": "media_star",
+# #             "subscription": package_name,
+# #             "amount": float(amount),
+# #             "service_charge": float(service_charge),
+# #             "total": float(total_amount),
+# #             "message": f"Media Star {package_name} subscription activated successfully"
+# #         }), 200
+        
+# #     except Exception as e:
+# #         db.session.rollback()
+# #         logger.error(f"Internal Media Star payment failed: {e}", exc_info=True)
+# #         return jsonify({"error": f"Payment failed: {str(e)}"}), 500
+# # #=========================================================================================
+# # def process_external_media_star_payment(user, amount, service_charge, phone, serial_number, package_code, package_name):
+# #     """Process Media Star payment via external MarzPay"""
+# #     print("💳 Processing Media Star payment via MarzPay")
+    
+# #     total_amount = amount + Decimal(str(service_charge))
+    
+# #     # Prepare Media Star metadata
+# #     media_star_data = {
+# #         "subscription": package_name,
+# #         "serial_number": serial_number,
+# #         "package_code": package_code,
+# #         "amount": float(amount),
+# #         "service_charge": float(service_charge),
+# #         "phone": phone,
+# #         "utility_code": "MEDIA_STAR"
+# #     }
+    
+# #     # Create payment record with media_star_data
+# #     payment = create_payment_record(
+# #         user=user,
+# #         amount=float(total_amount),
+# #         phone=phone,
+# #         payment_type="media_star",  # This matches the string we handle above
+# #         package=None
+# #        # media_star_data=media_star_data
+# #     )
+    
+# #     if not payment:
+# #         return jsonify({"error": "Failed to create payment record"}), 500
+    
+# #     db.session.commit()
+    
+# #     # Call MarzPay
+# #     marz_data, error = send_to_marzpay(payment, phone, float(total_amount))
+    
+# #     if error:
+# #         payment.status = PaymentStatus.FAILED.value
+# #         db.session.commit()
+# #         return jsonify(error), 502
+    
+# #     if marz_data and marz_data.get('status') == 'success':
+# #         payment.external_ref = marz_data.get('data', {}).get('transaction', {}).get('uuid')
+# #         payment.status = PaymentStatus.PENDING.value
+# #         db.session.commit()
+# #         return jsonify({
+# #             "success": True,
+# #             "status": "success",
+# #             "reference": payment.reference,
+# #             "payment_type": "media_star",
+# #             "subscription": package_name,
+# #             "amount": float(amount),
+# #             "service_charge": float(service_charge),
+# #             "total": float(total_amount),
+# #             "message": f"Media Star {package_name} subscription activated successfully"
+# #         }), 200
+# #     else:
+# #         payment.status = PaymentStatus.FAILED.value
+# #         db.session.commit()
+# #         return jsonify({
+# #             "status": "failed",
+# #             "error": "Payment gateway error"
+# #         }), 400
+# # #===========================================================================================
+# # def process_internal_package_payment(user, package_obj):
+# #     """Process package purchase using internal account balance (actual + wallet)"""
+# #     logging.info("=== PROCESSING INTERNAL PACKAGE PAYMENT ===")
+    
+# #     from models import Transaction, Notification
+# #     from decimal import Decimal
+# #     import uuid
+    
+# #     amount = Decimal(str(package_obj.amount))
+# #     actual_balance = Decimal(str(user.actual_balance or 0))
+    
+# #     # Start atomic transaction
+# #     try:
+# #         # Deduct from actual balance first
+# #         deduct_from_actual = min(amount, actual_balance)
+# #         if deduct_from_actual > 0:
+# #             user.actual_balance -= deduct_from_actual
+        
+# #         # Deduct remaining from wallet
+# #         deduct_from_wallet = amount - deduct_from_actual
+# #         if deduct_from_wallet > 0:
+# #             # Create wallet transaction
+# #             wallet_tx = Transaction(
+# #                 user_id=user.id,
+# #                 wallet_id=user.wallet.id,
+# #                 amount=-deduct_from_wallet,
+# #                 type='package_purchase',
+# #                 status='completed',
+# #                 reference=str(uuid.uuid4())
+# #             )
+# #             db.session.add(wallet_tx)
+            
+# #             # Update wallet balance
+# #             user.wallet.balance -= deduct_from_wallet
+        
+# #         db.session.add(user)
+                
+# #         # ========== ONLY PROCESS BONUSES IF FIRST PURCHASE ==========
+# #         is_first_purchase = not user_has_any_package(user.id)
+# #         print(is_first_purchase)
+
+# #         # Check for existing payment
+# #         existing_payment = handle_existing_payment(user, package_obj.amount, "package")
+# #         if existing_payment:
+# #             return jsonify({
+# #                 "reference": existing_payment.reference,
+# #                 "status": existing_payment.status,
+# #                 "note": "Idempotent: existing record returned"
+# #             }), 200
+        
+# #         # Create payment record
+# #         payment = create_payment_record(user, package_obj.amount, None, "package", package=package_obj)
+# #         if not payment:
+# #             return jsonify({"error": "Failed to create payment record"}), 500
+        
+# #         # Create user package
+# #         from blueprints.payments_helpers import create_user_package
+# #         user_package = create_user_package(user, package_obj)
+        
+# #         # Update payment status
+# #         payment.status = PaymentStatus.COMPLETED.value
+# #         payment.raw_response = json.dumps({
+# #             "method": "internal_balance",
+# #             "deduct_from_actual": float(deduct_from_actual),
+# #             "deduct_from_wallet": float(deduct_from_wallet)
+# #         })
+        
+# #         # Create notification
+# #         notification = Notification(
+# #             user_id=user.id,
+# #             message=f"Package '{package_obj.name}' purchased successfully using {'balance' if deduct_from_actual > 0 else 'wallet funds'}. Amount: {amount:,.0f} UGX",
+# #             notification_type='package_purchase',
+# #             is_read=False
+# #         )
+# #         db.session.add(notification)
+        
+# #         from notification.notification import send_package_activation_notifications
+# #         send_package_activation_notifications(user, package_obj)
+        
+# #         db.session.commit()
+# #         # ========== STEP 4: PROCESS BONUSES ONLY IF FIRST PURCHASE ==========
+# #         # ========== STEP 4: PROCESS BONUSES ONLY IF FIRST PURCHASE ==========
+# #         bonus_success = False
+# #         bonus_message = ""
+
+# #         if is_first_purchase:
+# #             print("USER FIRST TIME PACKAGE PURCHASE: Processing Referral Bonuses....")
+# #             from bonus.payment_processor import process_package_purchase
+# #             bonus_success, bonus_message = process_package_purchase(payment)
+# #             print(f"Bonus processing result: {bonus_success} - {bonus_message}")
+# #         else:
+# #             from bonus.refferral_tree import ReferralTreeHelper
+# #             print(f"User {user.id} already has a package - crediting direct referrer only")
+# #             bonus_success, bonus_message, transaction_id = ReferralTreeHelper.process_direct_referral_bonus(
+# #                                 user_id=user.id,
+# #                                 purchase_amount=payment.amount
+# #                             )
+# #             print(f"Direct referral bonus result: {bonus_success} - {bonus_message}")
+# #             if transaction_id:
+# #                 print(f"Transaction ID: {transaction_id}")
+
+# #         # Commit AFTER all operations succeed
+# #         db.session.commit()
+
+# #         # Build response based on bonus outcome
+# #         response_data = {
+# #             "reference": payment.reference,
+# #             "status": PaymentStatus.COMPLETED.value,
+# #             "payment_type": "package",
+# #             "package": package_obj.id,
+# #             "message": f"Package purchased using {'balance' if deduct_from_actual > 0 else 'wallet funds'}",
+# #             "new_actual_balance": float(user.actual_balance),
+# #             "new_wallet_balance": float(user.wallet.balance) if user.wallet else 0,
+# #             "deducted_from_actual": float(deduct_from_actual),
+# #             "deducted_from_wallet": float(deduct_from_wallet),
+# #             "referral_bonus_processed": bonus_success,
+# #             "bonus_message": bonus_message
+# #         }
+
+# #         if bonus_success:
+# #             print(f"✅ Package processed: {bonus_message}")
+# #             return jsonify(response_data), 200
+# #         else:
+# #             print(f"⚠️ Package created but bonus issue: {bonus_message}")
+# #             return jsonify(response_data), 200  # Still 200 because package was created
+
+            
+# #     except Exception as e:
+# #         db.session.rollback()
+# #         logger.error(f"Internal package payment failed: {e}", exc_info=True)
+# #         return jsonify({"error": f"Payment failed: {str(e)}"}), 500
+
+# def process_external_package_payment(user, amount, phone, package_obj):
+#     """Process package purchase via external MarzPay payment"""
+#     print("=" * 80)
+#     print("🔵 [process_external_package_payment] STARTED")
+#     print("=" * 80)
+#     print(f"📋 User ID: {user.id}")
+#     print(f"📋 Amount: {amount}")
+#     print(f"📋 Phone: {phone}")
+#     print(f"📋 Package: {package_obj.id} - {package_obj.name}")
+    
+#     try:
+#         print("🔍 Step 1: Creating payment record...")
+#         payment = create_payment_record(user, amount, phone, "package", package=package_obj)
+#         print(f"   Payment record: {payment}")
+        
+#         if not payment:
+#             print("❌ Failed to create payment record - returning 500")
+#             return jsonify({"error": "Failed to create payment record"}), 500
+#         print(f"✅ Payment record created successfully - ID: {payment.id}, Reference: {payment.reference}")
+        
+#         print("🔍 Step 2: Calling send_to_marzpay()...")
+#         print("   ⚠️ THIS IS THE CRITICAL STEP - CHECKING FOR 404 HERE")
+#         print(f"   Parameters: payment={payment.id}, phone={phone}, amount={amount}, package={package_obj.id}")
+        
+#         marz_data, error = send_to_marzpay(payment, phone, amount, package_obj)
+        
+#         print(f"🔍 Step 3: Received response from send_to_marzpay()")
+#         print(f"   marz_data: {marz_data}")
+#         print(f"   error: {error}")
+        
+#         if error:
+#             print(f"❌ Error from MarzPay: {error}")
+#             payment.status = PaymentStatus.FAILED.value
+#             db.session.commit()
+#             print("📤 Returning error response with 502")
+#             return jsonify(error), 502
+        
+#         print("✅ MarzPay call successful")
+#         print(f"   marz_data keys: {marz_data.keys() if marz_data else 'None'}")
+        
+#         print("🔍 Step 4: Committing to database...")
+#         db.session.commit()
+#         print("✅ Database commit successful")
+        
+#         print("🔍 Step 5: Building success response...")
+#         response = jsonify({
+#             "reference": payment.reference,
+#             "status": payment.status,
+#             "payment_type": "package",
+#             "package": package_obj.id,
+#             "checkout_url": marz_data.get("pop_up_info")
+#         })
+        
+#         print(f"📤 SUCCESS - Returning 200 response")
+#         print("=" * 80)
+#         print("🔵 [process_external_package_payment] COMPLETED SUCCESSFULLY")
+#         print("=" * 80)
+#         return response, 200
+
+#     except Exception as e:
+#         db.session.rollback()
+#         print(f"❌❌❌ EXCEPTION in process_external_package_payment: {type(e).__name__}: {e}")
+#         print(f"❌ Exception details:")
+#         import traceback
+#         traceback.print_exc()
+#         logger.error(f"Failed to complete external package payment: {e}")
+#         print("📤 Returning error with 500")
+#         return False, str(e)
+
+# # ============================================================
+# # CARD PAYMENT HELPER FUNCTIONS
+# # ============================================================
+
+# def call_marz_card_api(amount, reference):
+#     """Call MarzPay card payment API"""
+#     from blueprints.payments_helpers import send_card_payment_to_marz
+    
+#     callback_url = url_for('payments.card_callback', _external=True)
+    
+#     try:
+#         return send_card_payment_to_marz(
+#             amount=amount,
+#             reference=reference,
+#             callback_url=callback_url
+#         )
+#     except Exception as e:
+#         print(f"❌ Exception calling MarzPay: {e}")
+#         return None
+
+
+# def validate_marz_card_response(marz_response):
+#     """Validate MarzPay card response structure"""
+#     if not marz_response:
+#         return False
+    
+#     if marz_response.get('status') != 'success':
+#         return False
+    
+#     if 'data' not in marz_response:
+#         return False
+    
+#     if 'transaction' not in marz_response['data']:
+#         return False
+    
+#     if 'redirect_url' not in marz_response['data']:
+#         return False
+    
+#     return True
+
+
+# def update_payment_with_marz_data(payment, marz_response, amount):
+#     """Update payment record with MarzPay response data"""
+#     marz_data = marz_response['data']
+    
+#     payment.metadata = json.dumps({
+#         'marz_uuid': marz_data['transaction'].get('uuid'),
+#         'marz_reference': marz_data['transaction'].get('reference'),
+#         'marz_status': marz_data['transaction'].get('status'),
+#         'redirect_url': marz_data['redirect_url'],
+#         'initiated_at': datetime.utcnow().isoformat(),
+#         'amount': amount,
+#         'payment_method': 'card'
+#     })
+#     db.session.commit()
+
+
+# def handle_card_payment_failure(payment, marz_response, custom_error=None):
+#     """Handle card payment failure and update payment record"""
+#     error_msg = custom_error or marz_response.get('message', 'MarzPay initiation failed') if marz_response else 'No response from payment gateway'
+    
+#     payment.status = PaymentStatus.FAILED.value
+#     payment.metadata = json.dumps({
+#         'error': error_msg,
+#         'marz_response': marz_response,
+#         'timestamp': datetime.utcnow().isoformat()
+#     })
+#     db.session.commit()
+    
+#     return jsonify({"error": error_msg}), 502
+
+# def process_package_bonuses(payment):
+#     """Process referral bonuses after package purchase"""
+#     try:
+#         from bonus.payment_processor import process_package_purchase
+#         success, message = process_package_purchase(payment)
+#         return success, message
+#     except Exception as e:
+#         logger.error(f"Bonus processing failed: {e}")
+#         return False, str(e)
+
+# # ============================================================
+# # CALLBACK HANDLERS
+# # ============================================================
+# @bp.route("/payments/card-callback", methods=['GET', 'POST'])
+# def card_callback():
+#     """Handle redirect from MarzPay card gateway"""
+#     print("🔹 Card callback received")
+    
+#     reference = request.args.get('reference') or request.json.get('reference') if request.is_json else None
+#     status = request.args.get('status') or request.json.get('status') if request.is_json else None
+    
+#     if not reference:
+#         return jsonify({"error": "No reference provided"}), 400
+    
+#     payment = Payment.query.filter_by(reference=reference).first()
+#     if not payment:
+#         return jsonify({"error": "Payment not found"}), 404
+    
+#     # Determine success
+#     is_success = status == 'success'
+#     if not is_success and request.json:
+#         is_success = request.json.get('data', {}).get('transaction', {}).get('status') == 'completed'
+    
+#     # Update payment
+#     if is_success:
+#         payment.status = PaymentStatus.COMPLETED.value
+#         payment.completed_at = datetime.utcnow()
+#         print(f"✅ Card payment completed: {reference}")
+#     else:
+#         payment.status = PaymentStatus.FAILED.value
+#         print(f"❌ Card payment failed: {reference}")
+    
+#     # Update metadata
+#     current_meta = json.loads(payment.metadata) if payment.metadata else {}
+#     current_meta['callback_received_at'] = datetime.utcnow().isoformat()
+#     current_meta['callback_status'] = status
+#     payment.metadata = json.dumps(current_meta)
+    
+#     db.session.commit()
+    
+#     # Redirect to frontend
+#     frontend_url = os.getenv('APP_BASE_URL', 'https://super-kash.com')
+#     return redirect(f"{frontend_url}/profile?payment_status={'success' if is_success else 'failed'}&reference={reference}")
+
+
+# #==========================================================================================================
+# # @bp.route("/payments/callback", methods=['POST'])
+# # #def payment_callback():
+# #     payment = None
+# #     try:
+# #         data = request.get_json(silent=True) or {}
+# #         print(f"🔍 RAW CALLBACK DATA: {json.dumps(data, indent=2)}")
+        
+# #         if not data:
+# #             return jsonify({"error": "No JSON data"}), 400
+
+# #         transaction = data.get("transaction", {})
+# #         status = transaction.get("status", "completed").lower()
+# #         print(f"🔄 MARZ STATUS: {status}")
+        
+# #         reference = (
+# #             data.get("transaction", {}).get("reference") or
+# #             data.get("reference")
+# #         )
+# #         ext_uuid = transaction.get("uuid") or data.get("uuid")
+        
+# #         if not reference and not ext_uuid:
+# #             return jsonify({"error": "Missing reference"}), 400
+        
+# #         # Get payment with row lock
+# #         payment = None
+# #         if reference:
+# #             payment = Payment.query.filter_by(reference=reference).with_for_update().first()
+        
+# #         if not payment and ext_uuid:
+# #             payment = Payment.query.filter_by(external_ref=ext_uuid).with_for_update().first()
+        
+# #         if not payment:
+# #             print(f"No matching payment for reference {reference} / ext {ext_uuid}")
+# #             return jsonify({"status": "ignored"}), 200
+            
+# #         # Prevent duplicate processing
+# #         if payment.status == PaymentStatus.COMPLETED.value:
+# #             print(f"⚠️ Payment already processed: {payment.reference}")
+# #             return jsonify({"status": "already_processed"}), 200
+        
+# #         if payment.status == PaymentStatus.FAILED.value:
+# #             print(f"⚠️ Payment previously failed: {payment.reference}")
+# #             return jsonify({"status": "already_failed"}), 200
+        
+# #         # Handle success status
+# #         if status in ("complete", "completed", "paid"):
+# #             payment.status = PaymentStatus.COMPLETED.value
+# #             payment.verified = True
+# #             payment.updated_at = datetime.now(timezone.utc)
+# #             payment.provider = data.get("transaction", {}).get("provider")
+# #             payment.external_ref = transaction.get("uuid")
+# #             payment.raw_response = json.dumps(data)
+# #             payment.provider_reference = transaction.get("provider_reference")
+            
+# #             print(f"🔍 Checking payment type: {payment.payment_type}")
+# #             print(f"✅ Payment status updated to: {payment.status}")
+            
+# #                         # ============================================================
+# #             # MEDIA STAR HANDLER
+# #             # ============================================================
+# #             if payment.payment_type == "media_star":
+# #                 print("📺 Processing Media Star subscription from callback")
+# #                 user = User.query.get(payment.user_id)
+                
+# #                 if not user:
+# #                     payment.status = PaymentStatus.FAILED.value
+# #                     db.session.commit()
+# #                     return jsonify({"error": "User not found"}), 400
+                
+# #                 try:
+# #                     # Extract Media Star metadata from raw_response
+# #                     metadata = json.loads(payment.raw_response or '{}')
+# #                     print(f"📺 Media Star metadata: {metadata}")
+                    
+# #                     # Get subscription details (stored during initiation)
+# #                     subscription_data = json.loads(payment.raw_response) if payment.raw_response else {}
+# #                     if 'subscription' in subscription_data:
+# #                         package_name = subscription_data.get('subscription')
+# #                         serial_number = subscription_data.get('serial_number')
+# #                         package_code = subscription_data.get('package_code')
+# #                         amount = subscription_data.get('amount', 0)
+# #                         service_charge = subscription_data.get('service_charge', 1500)
+# #                     else:
+# #                         # Fallback: try to get from metadata field
+# #                         metadata_field = json.loads(payment.metadata) if payment.metadata else {}
+# #                         package_name = metadata_field.get('subscription', 'Media Star')
+# #                         serial_number = metadata_field.get('serial_number', 'N/A')
+# #                         package_code = metadata_field.get('package_code', 'N/A')
+# #                         amount = float(payment.amount) - 1500
+# #                         service_charge = 1500
+                    
+# #                     print(f"📺 Activating: {package_name} for serial: {serial_number}")
+                    
+# #                     # ✅ TODO: Call Media Star API to activate subscription
+# #                     # response = requests.post(
+# #                     #     "https://api.mediastar.com/activate",
+# #                     #     json={
+# #                     #         "phone": payment.phone_number,
+# #                     #         "serial": serial_number,
+# #                     #         "package": package_code,
+# #                     #         "amount": amount
+# #                     #     },
+# #                     #     timeout=30
+# #                     # )
+                    
+# #                     # Create success notification
+# #                     from models import Notification
+# #                     notification = Notification(
+# #                         user_id=user.id,
+# #                         message=f"📺 Media Star TV subscription '{package_name}' activated successfully! Amount: {amount:,.0f} UGX + {service_charge:,.0f} UGX service charge.",
+# #                         notification_type='bill_payment',
+# #                         is_read=False
+# #                     )
+# #                     db.session.add(notification)
+                    
+# #                     # Also add to user's actual balance if there's any remaining? No, payment was external
+# #                     # Just mark as completed
+                    
+# #                     db.session.commit()
+# #                     print(f"✅ Media Star subscription activated for user {user.id}")
+                    
+# #                     return jsonify({
+# #                         "status": "ok",
+# #                         "payment_type": "media_star",
+# #                         "subscription": package_name,
+# #                         "message": "Media Star subscription activated successfully"
+# #                     }), 200
+                    
+# #                 except Exception as e:
+# #                     db.session.rollback()
+# #                     current_app.logger.error(f"Media Star processing failed: {e}", exc_info=True)
+# #                     payment.status = PaymentStatus.PENDING.value
+# #                     db.session.add(payment)
+# #                     db.session.commit()
+# #                     return jsonify({"error": f"Media Star processing failed: {str(e)}"}), 500
+
+
+# #             # ✅ FIX 2: Process based on payment type
+# #             if payment.payment_type == "package":
+# #                 user = User.query.get(payment.user_id)
+# #                 package_obj = payment.package_catalog
+                
+# #                 # ✅ FIX 3: Correct logic - check BOTH conditions
+# #                 if not package_obj or not user:
+# #                     payment.status = PaymentStatus.FAILED.value
+# #                     db.session.commit()
+# #                     return jsonify({"error": "Missing Package or User"}), 400
+                
+# #                 try:
+# #                     from blueprints.payments_helpers import create_user_package
+# #                     user_package = create_user_package(user, package_obj)
+                    
+# #                     from notification.notification import send_package_activation_notifications
+# #                     send_package_activation_notifications(user, package_obj)
+
+                    
+# #                     existing_package = Package.query.filter(
+# #                         Package.user_id == user.id,
+# #                         Package.id != user_package.id 
+# #                     ).first()
+                    
+# #                     is_first_purchase = (existing_package is None)
+
+# #                      # ========== STEP 4: PROCESS BONUSES ONLY IF FIRST PURCHASE ==========
+# #                     if is_first_purchase:
+# #                         print("USER FIRST TIME PACKAGE PURCHASE: Processing Referral Bonuses....")
+# #                         from bonus.payment_processor import process_package_purchase
+# #                         success, message = process_package_purchase(payment)
+# #                         print(f"Bonus processing result: {success} - {message}")
+# #                     else:
+# #                         from bonus.refferral_tree import ReferralTreeHelper
+# #                         print(f"User {user.id} already has a package - crediting direct referrer only")
+# #                         success, message, transaction_id = ReferralTreeHelper.process_direct_referral_bonus(
+# #                                             user_id=user.id,
+# #                                             purchase_amount=payment.amount
+# #                                         )
+                        
+# #                         print(f"Direct referral bonus result: {success} - {message}")
+# #                         if transaction_id:
+# #                             print(f"Transaction ID: {transaction_id}")
+                     
+# #                     # =========================================================================
+     
+# #                     # ✅ FIX 4: Commit ONLY after ALL operations succeed
+# #                     db.session.commit()
+                    
+# #                     if success:
+# #                         print(f"✅ Package processed: {message}")
+# #                         return jsonify({
+# #                             "status": "ok",
+# #                             "bonus_status": "success",
+# #                             "message": message
+# #                         }), 200
+# #                     else:
+# #                         # ✅ FIX 5: Even if bonus processing had issues, package is created
+# #                         # This is still a success for the payment
+# #                         print(f"⚠️ Package created but bonus issue: {message}")
+# #                         return jsonify({
+# #                             "status": "ok",
+# #                             "bonus_status": "warning",
+# #                             "message": "Package created but bonus processing had issues"
+# #                         }), 200
+                        
+# #                 except Exception as e:
+# #                     db.session.rollback()
+# #                     current_app.logger.error(f"Package processing failed: {e}", exc_info=True)
+# #                     # Keep payment as PENDING for retry
+# #                     payment.status = PaymentStatus.PENDING.value
+# #                     db.session.add(payment)
+# #                     db.session.commit()
+# #                     return jsonify({"error": f"Package processing failed: {str(e)}"}), 500
+                    
+# #             elif payment.payment_type == "deposit":
+# #                 user = User.query.get(payment.user_id)
+# #                 if not user:
+# #                     payment.status = PaymentStatus.FAILED.value
+# #                     db.session.rollback()
+# #                     return jsonify({"error": "User not found"}), 400
+                
+# #                 try:
+# #                     user.actual_balance += Decimal(str(payment.amount))
+# #                     print(f"Deposit completed: Added {payment.amount} to user {user.id}")
+# #                     db.session.commit()
+# #                     return jsonify({"status": "ok", "message": "Deposit processed"}), 200
+                    
+# #                 except Exception as e:
+# #                     db.session.rollback()
+# #                     current_app.logger.error(f"Deposit processing failed: {e}", exc_info=True)
+# #                     payment.status = PaymentStatus.PENDING.value
+# #                     db.session.add(payment)
+# #                     db.session.commit()
+# #                     return jsonify({"error": "Deposit processing failed"}), 500
+        
+# #         else:
+# #             # Handle failed payment
+# #             print(f"❌ Payment failed with status: {status}")
+# #             payment.status = PaymentStatus.FAILED.value
+# #             payment.updated_at = datetime.now(timezone.utc)
+# #             db.session.commit()
+# #             return jsonify({"status": "ok", "message": "Payment marked as failed"}), 200
+        
+# #     except Exception as e:
+# #         # ✅ FIX 6: Always rollback on exception
+# #         if payment:
+# #             db.session.rollback()
+# #         current_app.logger.error(f"Callback error: {e}", exc_info=True)
+# #         return jsonify({"error": "Payment processing failed"}), 500
+# #=======================================================================================================
+# MARZ_BASE_URL = 'https://wallet.wearemarz.com/api/v1'
+# #=================================================================================================================
+# @bp.route("/payments/withdraw", methods=["POST"])
+# def withdraw():
+#     """
+#     Main withdrawal endpoint with MarzPay integration
+#     """
+#     return jsonify({"success": "withdraw successful"}), 200
+#     data = request.get_json(force=True, silent=True)
+#     amount = data.get("amount")
+  
+#     payment_type = data.get("payment_type", "withdrawal")
+#     recipient_phone = data.get("recipient_phone") if payment_type == "send_money" else None
+
+#     phone_number = None
+
+#     user_id = session.get("user_id")
+#     if not user_id:
+#         return jsonify({"error": "User not authenticated"}), 401
+    
+#     user = db.session.get(User, user_id)
+#     if not user:
+#         return jsonify({"error": "User not found"}), 404
+    
+#     if payment_type == "send_money":
+#         phone_number = user.phone
+#         if not phone_number:
+#             return jsonify({"error": "User does not have a registered phone number"}), 400
+#     else:
+#         phone_number = data.get("phone") or data.get("phone_number")
+
+#     idempotency_key = request.headers.get('Idempotency-Key')
+#     if not idempotency_key:
+#         import hashlib
+#         key_material = f"{session.get('user_id')}:{amount}:{phone_number}:{datetime.now().date()}"
+#         idempotency_key = hashlib.sha256(key_material.encode()).hexdigest()
+#     logger.info(f"The Idempotency key is {idempotency_key}")
+#     print("MOBILE DEBUG:", request.headers)
+#     print("BODY:", request.data)
+#     logger.info(f"WITHDRAW PROCESSING STARTED: {data}, {amount}, {phone_number}")
+
+
+#     if not request.is_json:
+#         return jsonify({"error": "Request must be JSON"}), 400
+    
+#     if payment_type == "send_money" and not recipient_phone:
+#         return jsonify({"error": "Recipient phone number required for send money"}), 400  
+      
+#     if payment_type != "send_money" and not phone_number:
+#         return jsonify({"error": "Phone number is required"}), 400
+    
+#     if payment_type != "send_money" and not amount:
+#         return jsonify({"error": "Amount is required"}), 400
+
+#     user_id = session.get("user_id")
+#     if not user_id:
+#         return jsonify({"error": "User not authenticated"}), 401
+
+#     try:
+#         # Convert amount to Decimal for processing
+#         amount_decimal = Decimal(str(amount))
+        
+#         # Step 1: Process withdrawal internally (validate, deduct balances, create record)
+#         success, message, withdrawal_data = WithdrawalProcessor.process_withdrawal_request(
+#             user_id, amount_decimal, phone_number, idempotency_key
+#         )
+        
+#         if not success:
+#             return jsonify({"error": message}), 400
+        
+#         if withdrawal_data.get('already_processed'):
+#             return jsonify({
+#                 "success": True,
+#                 "message": message,
+#                 "withdrawal_id": withdrawal_data['reference'],
+#                 "already_processed": True
+#             }), 200
+        
+       
+#         merchant_reference = withdrawal_data['reference'] 
+#         amount = withdrawal_data['net_amount']
+        
+#         CALL_BACK_URL = "https://super-kash.com/withdraw/callback" #'https://bedfast-kamron-nondeclivitous.ngrok-free.dev/payments/callback' 
+#         if payment_type == "send_money":
+#             marzpay_phone = recipient_phone
+#             description = "send_money"
+#             print(f"💰 SENDING MONEY to recipient: {marzpay_phone}")
+#         else:
+#             marzpay_phone = phone_number  # Use user's own phone
+#             description = "customer_withdraw"
+#             print(f"💰 PROCESSING WITHDRAWAL for user: {marzpay_phone}")
+        
+#         formatted_phone = marzpay_phone.strip()
+#         if formatted_phone.startswith('0'):
+#             formatted_phone = f"+256{formatted_phone[1:]}"
+#         elif formatted_phone.startswith('256'):
+#             formatted_phone = f"+{formatted_phone}"
+#         elif not formatted_phone.startswith('+'):
+#             formatted_phone = f"+256{formatted_phone[-9:]}"
+        
+#         payload = {
+#             "reference": withdrawal_data['reference'],
+#             "amount":  withdrawal_data['net_amount'],                                                  #int(amount), 
+#             "phone_number": formatted_phone,  
+#             "country": "UG",
+#             "description": "customer_withdraw",
+#             "callback_url": CALL_BACK_URL,
+#         }
+
+#         if payment_type == "send_money":
+#             payload["metadata"] = {
+#                 "payment_type": "send_money",
+#                 "recipient_name": data.get("recipient_name", ""),
+#                 "sender_id": user_id
+#             }
+            
+#         print("🔹 MarzPay payload:", json.dumps(payload, indent=2))
+#         headers = {
+#             "Authorization": f"Basic {os.environ.get('MARZ_AUTH_HEADER')}",
+#             "Content-Type": "application/json"
+#         }
+
+#         # Step 3: Call MarzPay API
+#         print(f"Calling MarzPay API for withdrawal {merchant_reference}", flush=True)
+#         response = requests.post(
+#             f"{MARZ_BASE_URL}/send-money", 
+#             json=payload, 
+#             headers=headers, 
+#             timeout=60
+#         )
+        
+#         print(f"MarzPay response status: {response.status_code}, body: {response.text}", flush=True)
+#         response.raise_for_status()
+#         marz_data = response.json()
+
+#         # Step 4: Update withdrawal status based on MarzPay response
+#         transaction_status = marz_data.get('data', {}).get('transaction', {}).get('status')
+#         transaction_uuid = marz_data.get('data', {}).get('transaction', {}).get('uuid')  #marz_data.get('data', {}).get('transaction', {}).get('uuid')
+#         if transaction_status in ['pending', 'processing']:
+#             from blueprints.withdraw_helpers import WithdrawalRecordManager
+#             WithdrawalRecordManager.update_status(
+#                 withdrawal_data['withdrawal_id'], 
+#                 "processing",  
+#                 external_ref=transaction_uuid
+#             )
+#             db.session.commit()
+            
+#             return jsonify({
+#                 "success": True,
+#                 "message": "Withdrawal request submitted successfully",
+#                 "withdrawal_id": merchant_reference,
+#                 "marz_response": marz_data,
+#                 "net_amount": str(withdrawal_data.get('net_amount', amount)),
+#                 "fee": str(withdrawal_data.get('fee', '0'))
+#             }), 200
+#         elif transaction_status == 'failed':
+#             # Immediate failure - rare but possible
+#             WithdrawalProcessor.fail_withdrawal(
+#                 withdrawal_data['withdrawal_id'],
+#                 user_id,
+#                 amount_decimal,
+#                 withdrawal_data.get('balances', {})
+#             )
+#             return jsonify({"error": "Withdrawal failed"}), 400
+#         else:
+#             # MarzPay returned non-success status
+#             raise Exception(f"MarzPay returned status: {marz_data.get('status')}")
+
+#     except requests.exceptions.RequestException as e:
+#         print(f"MarzPay request error: {str(e)}", flush=True)
+        
+#         # Reverse the withdrawal since MarzPay failed
+#         if 'withdrawal_data' in locals():
+#             WithdrawalProcessor.fail_withdrawal(
+#                 withdrawal_data['withdrawal_id'],
+#                 user_id,
+#                 amount_decimal,
+#                 withdrawal_data.get('balances', {})
+#             )
+        
+#         return jsonify({
+#             "error": "Payment Network is slow",
+#             "details": "Your funds have been refunded. Please try again later."
+#         }), 502
+        
+#     except WithdrawalException as e:
+#         print(f"Withdrawal processing error: {str(e)}", flush=True)
+#         return jsonify({"error": str(e)}), 400
+        
+#     except Exception as e:
+#         print(f"Unexpected error in withdrawal: {str(e)}", flush=True)
+        
+#         # Attempt to reverse on any unexpected error
+#         if 'withdrawal_data' in locals():
+#             WithdrawalProcessor.fail_withdrawal(
+#                 withdrawal_data['withdrawal_id'],
+#                 user_id,
+#                 amount_decimal,
+#                 withdrawal_data.get('balances', {})
+#             )
+        
+#         return jsonify({
+#             "error": "Withdrawal processing failed",
+#             "details": "Your funds have been refunded. Please try again."
+#         }), 500
+    
+# #=================================================================================================
+# #=================================================================================================
+
+# import logging
+# from flask import request, jsonify
+# from datetime import datetime, timezone
+
+# logger = logging.getLogger(__name__)
+# #===================================================================================================
+# @bp.route("/withdraw/callback", methods=["POST"])
+# def withdraw_callback():
+#     print("MARZ WITHDRAW CALLBACK RECEIVED")
+    
+#     try:
+#         data = request.get_json()
+#         print(f"RAW CALLBACK DATA: {json.dumps(data, indent=2)}")
+#         if not data:
+#             return jsonify({"error": "No data received"}), 400
+        
+#         # EXACT SAME LOGIC AS PAYMENT CALLBACK
+#         transaction = data.get("transaction", {})
+        
+#         # Get references - SAME AS PAYMENT
+#         reference = (
+#             transaction.get("reference") or
+#             data.get("reference")  
+#         )
+#         provider_reference = data.get("provider_reference") or transaction.get("provider_reference")
+
+#         ext_uuid = transaction.get("uuid") or data.get("uuid")
+        
+#         status = transaction.get("status", "").lower()
+#         print(f"🔄 MARZ WITHDRAW STATUS: {status}")
+#         print(f"🔍 Checking references: reference={reference}, ext_uuid={ext_uuid}")
+
+#         # SIMPLE SEARCH - SAME AS PAYMENT
+#         withdrawal = None
+        
+#         # Try by reference (your UUID) first
+#         if reference:
+#             withdrawal = Withdrawal.query.filter_by(reference=reference).first()
+#             if withdrawal:
+#                 print(f"✅ Found withdrawal by reference: {reference}")
+        
+#         # Try by external UUID
+#         if not withdrawal and ext_uuid:
+#             withdrawal = Withdrawal.query.filter_by(external_ref=ext_uuid).first()
+#             if withdrawal:
+#                 print(f"✅ Found withdrawal by external UUID: {ext_uuid}")
+
+#         if not withdrawal and provider_reference:
+#             withdrawal = Withdrawal.query.filter_by(reference=provider_reference).first()
+#             if withdrawal:
+#                 print(f"✅ Found withdrawal by provider_reference: {provider_reference}")
+        
+#         if not withdrawal:
+#             print(f"❌ No withdrawal found for reference={reference}")
+#             return jsonify({"status": "ignored"}), 200
+    
+#         print(f"🎯 Processing withdrawal ID: {withdrawal.id}, current status: {withdrawal.status}")
+        
+#         # Store MarzPay's reference if we don't have it
+#         if not withdrawal.external_ref and ext_uuid:
+#             withdrawal.external_ref = ext_uuid
+#             db.session.commit()
+#             print(f"💾 Stored external_ref: {ext_uuid}")
+        
+#         # Process status (your existing logic)
+#         if withdrawal.status in ["completed", "failed"]:
+#             print(f"⏭️ Withdrawal {withdrawal.id} already {withdrawal.status}. Skipping.")
+#             return jsonify({"status": "ok"}), 200
+        
+#         if status == 'completed':
+#             print(f"✅ Completing withdrawal ID: {withdrawal.id}")
+#             WithdrawalProcessor.complete_withdrawal(withdrawal.id, reference or ext_uuid)
+        
+#         elif status in ['failed', 'rejected']:
+#             print(f"❌ Failing withdrawal ID: {withdrawal.id}")
+
+#             actual_deducted = withdrawal.actual_balance_deducted
+#             wallet_deducted = withdrawal.wallet_balance_deducted
+#             balance_details = {
+#                 'actual_deducted': str(actual_deducted) if actual_deducted is not None else '0',
+#                 'wallet_deducted': str(wallet_deducted) if wallet_deducted is not None else '0'
+#             }
+#             amount_decimal = Decimal(str(withdrawal.amount))
+
+#             print(f"   📊 Balance details for refund: {balance_details}")
+#             print(f"   💰 Amount (Decimal): {amount_decimal}")
+#             print(f"   👤 User ID: {withdrawal.user_id}")
+#             print(f"   📝 Withdrawal ID: {withdrawal.id}")
+#             WithdrawalProcessor.fail_withdrawal(withdrawal.id, withdrawal.user_id, amount_decimal, balance_details)
+#             print(f"✅ Withdrawal {withdrawal.id} marked as failed and refund initiated")
+        
+#         return jsonify({"status": "callback processed"}), 200
+
+#     except Exception as e:
+#         print(f"💥 Error processing MarzPay callback: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({"error": "Callback processing failed"}), 500
+    
+
+# #===============================================================================================================
+
+# @bp.route("/payments/withdraw/history", methods=["GET"])
+# def withdrawal_history():
+#     """
+#     Get user's withdrawal history
+#     """
+#     user_id = session.get("user_id")
+#     if not user_id:
+#         return jsonify({"error": "User not authenticated"}), 401
+    
+#     try:
+#         limit = request.args.get('limit', 10, type=int)
+#         withdrawals = WithdrawalQueryHelper.get_user_withdrawals(user_id, limit)
+        
+#         withdrawal_list = []
+#         for withdrawal in withdrawals:
+#             withdrawal_list.append({
+#                 'id': withdrawal.id,
+#                 'amount': str(withdrawal.amount),
+#                 'net_amount': str(withdrawal.net_amount) if withdrawal.net_amount else None,
+#                 'fee': str(withdrawal.fee) if withdrawal.fee else None,
+#                 'phone': withdrawal.phone,
+#                 'status': withdrawal.status,
+#                 'external_ref': withdrawal.external_ref,
+#                 'external_txid': withdrawal.external_txid,
+#                 'created_at': withdrawal.created_at.isoformat() if withdrawal.created_at else None,
+#                 'updated_at': withdrawal.updated_at.isoformat() if withdrawal.updated_at else None
+#             })
+        
+#         return jsonify({
+#             "success": True,
+#             "withdrawals": withdrawal_list,
+#             "total": len(withdrawal_list)
+#         }), 200
+        
+#     except Exception as e:
+#         print(f"Error fetching withdrawal history: {str(e)}", flush=True)
+#         return jsonify({"error": "Failed to fetch withdrawal history"}), 500
+
+
+# @bp.route("/payments/withdraw/limits", methods=["GET"])
+# def withdrawal_limits():
+#     """
+#     Get withdrawal limits and configuration
+#     """
+#     return jsonify({
+#         "success": True,
+#         "limits": {
+#             "min_withdrawal": str(WithdrawalConfig.MIN_WITHDRAWAL),
+#             "max_withdrawal": str(WithdrawalConfig.MAX_WITHDRAWAL),
+#             "processing_fee_percent": str(WithdrawalConfig.PROCESSING_FEE_PERCENT),
+#             "hold_period_hours": WithdrawalConfig.HOLD_PERIOD_HOURS
+#         }
+#     }), 200
+
+
+# @bp.route("/payments/withdraw/<withdrawal_id>", methods=["GET"])
+# def get_withdrawal_status(withdrawal_id):
+#     """
+#     Get specific withdrawal status
+#     """
+#     user_id = session.get("user_id")
+#     if not user_id:
+#         return jsonify({"error": "User not authenticated"}), 401
+    
+#     try:
+#         withdrawal = Withdrawal.query.filter_by(
+#             id=withdrawal_id, 
+#             user_id=user_id
+#         ).first()
+        
+#         if not withdrawal:
+#             return jsonify({"error": "Withdrawal not found"}), 404
+        
+#         return jsonify({
+#             "success": True,
+#             "withdrawal": {
+#                 'id': withdrawal.id,
+#                 'amount': str(withdrawal.amount),
+#                 'net_amount': str(withdrawal.net_amount) if withdrawal.net_amount else None,
+#                 'fee': str(withdrawal.fee) if withdrawal.fee else None,
+#                 'phone': withdrawal.phone,
+#                 'status': withdrawal.status,
+#                 'external_ref': withdrawal.external_ref,
+#                 'external_txid': withdrawal.external_txid,
+#                 'created_at': withdrawal.created_at.isoformat() if withdrawal.created_at else None,
+#                 'updated_at': withdrawal.updated_at.isoformat() if withdrawal.updated_at else None
+#             }
+#         }), 200
+        
+#     except Exception as e:
+#         print(f"Error fetching withdrawal status: {str(e)}", flush=True)
+#         return jsonify({"error": "Failed to fetch withdrawal status"}), 500
+
+# #==================================================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# # # ===========================================================================================================
+# # #   PAYMENT API BLUEPRINT - ZENGAPAY PRIMARY | MARZPAY FALLBACK
+# # # ===========================================================================================================
+# # from flask import Blueprint, request, jsonify, current_app, session, url_for, redirect
+# # import uuid
+# # from models import Payment, PaymentStatus, User, Withdrawal, PackageCatalog, Package, Referral, Bonus, ReferralBonus, TransactionType
+# # from sqlalchemy.exc import IntegrityError
+# # from sqlalchemy import select
+# # from sqlalchemy.orm import Session
+# # import re
+# # import json
+# # from sqlalchemy import and_
+# # import requests
+# # from extensions import db
+# # import os
+# # from datetime import datetime, timedelta, timezone
+# # import base64
+# # import logging
+# # import uuid
+# # from decimal import Decimal
+# # from blueprints.payments_helpers import (
+# #     MARZ_BASE_URL,
+# #     validate_payment_input,
+# #     handle_existing_payment,
+# #     create_payment_record,
+# #     send_to_marzpay,
+# #     initiate_payment,
+# #     check_package_funds_availability,
+# #     PRIMARY_GATEWAY,
+# #     # ZENGAPAY imports
+# #     ZENGAPAY_ENVIRONMENT,
+# #     initiate_zengapay_collection,
+# #     handle_zengapay_webhook,
+# #     check_zengapay_transaction_status,
+# #     get_zengapay_balance,
+# #     _zengapay_client
+# # )
+
+# # from models import Transaction, Notification
+# # from decimal import Decimal
+# # from .withdraw_helpers import (
+# #     WithdrawalProcessor,
+# #     WithdrawalQueryHelper,
+# #     WithdrawalConfig,
+# #     WithdrawalException
+# # )
+
+# # bp = Blueprint("payments", __name__)
+
+# # logger = logging.getLogger(__name__)
+# # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+# # # ============================================================
+# # # AUTHENTICATION HELPER
+# # # ============================================================
+
+# # def get_authenticated_user():
+# #     """Get authenticated user from session"""
+# #     user_id = session.get('user_id')
+# #     if user_id:
+# #         return User.query.get(user_id)
+# #     return None
+
+
+# # # ============================================================
+# # # MEDIA STAR PAYMENT HANDLER
+# # # ============================================================
+
+# # def handle_media_star_payment(user, validated):
+# #     """Handle Media Star TV subscription payment"""
+# #     from blueprints.payments_helpers import check_bill_funds_availability
+# #     print("=" * 60)
+# #     print("📺 MEDIA STAR PAYMENT INITIATION")
+# #     print("=" * 60)
+
+# #     amount = Decimal(str(validated["amount"]))
+# #     phone = validated["phone"]
+# #     serial_number = validated["serial_number"]
+# #     package_code = validated["package_code"]
+# #     package_name = validated["package_name"]
+# #     service_charge = validated.get("service_charge", 1500)
+# #     total_amount = amount + Decimal(str(service_charge))
+
+# #     has_funds, funds_msg, total_available = check_bill_funds_availability(
+# #         user.id, total_amount, utility_code='MEDIA_STAR'
+# #     )
+
+# #     if has_funds:
+# #         return process_internal_media_star_payment(user, amount, service_charge, phone, serial_number, package_code, package_name)
+# #     else:
+# #         return process_external_media_star_payment(user, amount, service_charge, phone, serial_number, package_code, package_name)
+
+
+# # def process_internal_media_star_payment(user, amount, service_charge, phone, serial_number, package_code, package_name):
+# #     """Process Media Star payment using internal balance"""
+# #     print("💰 Processing Media Star payment from internal balance")
+
+# #     from models import Transaction, Notification
+# #     from decimal import Decimal
+# #     import uuid
+# #     from models import TransactionType
+
+# #     total_amount = amount + Decimal(str(service_charge))
+# #     actual_balance = Decimal(str(user.actual_balance or 0))
+
+# #     try:
+# #         deduct_from_actual = min(total_amount, actual_balance)
+# #         if deduct_from_actual > 0:
+# #             user.actual_balance -= deduct_from_actual
+
+# #         deduct_from_wallet = total_amount - deduct_from_actual
+# #         if deduct_from_wallet > 0:
+# #             wallet_tx = Transaction(
+# #                 user_id=user.id,
+# #                 wallet_id=user.wallet.id,
+# #                 amount=-deduct_from_wallet,
+# #                 type='media_star_subscription',
+# #                 status='completed',
+# #                 reference=str(uuid.uuid4())
+# #             )
+# #             db.session.add(wallet_tx)
+# #             user.wallet.balance -= deduct_from_wallet
+
+# #         payment = Payment(
+# #             user_id=user.id,
+# #             reference=str(uuid.uuid4()),
+# #             amount=float(total_amount),
+# #             currency="UGX",
+# #             phone_number=phone,
+# #             status=PaymentStatus.COMPLETED.value,
+# #             method="Internal Balance",
+# #             payment_type="media_star",
+# #             transaction_type=TransactionType.DEPOSIT,
+# #             raw_response=json.dumps({
+# #                 "method": "internal_balance",
+# #                 "subscription": package_name,
+# #                 "serial_number": serial_number,
+# #                 "package_code": package_code,
+# #                 "amount": float(amount),
+# #                 "service_charge": float(service_charge)
+# #             })
+# #         )
+# #         db.session.add(payment)
+
+# #         notification = Notification(
+# #             user_id=user.id,
+# #             message=f"Media Star TV subscription '{package_name}' purchased successfully! Amount: {amount:,.0f} UGX + {service_charge:,.0f} UGX service charge.",
+# #             notification_type='bill_payment',
+# #             is_read=False
+# #         )
+# #         db.session.add(notification)
+
+# #         db.session.commit()
+
+# #         return jsonify({
+# #             "success": True,
+# #             "status": "success",
+# #             "reference": payment.reference,
+# #             "payment_type": "media_star",
+# #             "subscription": package_name,
+# #             "amount": float(amount),
+# #             "service_charge": float(service_charge),
+# #             "total": float(total_amount),
+# #             "message": f"Media Star {package_name} subscription activated successfully"
+# #         }), 200
+
+# #     except Exception as e:
+# #         db.session.rollback()
+# #         logger.error(f"Internal Media Star payment failed: {e}", exc_info=True)
+# #         return jsonify({"error": f"Payment failed: {str(e)}"}), 500
+
+
+# # def process_external_media_star_payment(user, amount, service_charge, phone, serial_number, package_code, package_name):
+# #     """Process Media Star payment via external gateway"""
+# #     print("💳 Processing Media Star payment via external gateway")
+
+# #     total_amount = amount + Decimal(str(service_charge))
+
+# #     payment = create_payment_record(
+# #         user=user,
+# #         amount=float(total_amount),
+# #         phone=phone,
+# #         payment_type="media_star",
+# #         package=None
+# #     )
+
+# #     if not payment:
+# #         return jsonify({"error": "Failed to create payment record"}), 500
+
+# #     db.session.commit()
+
+# #     marz_data, error = send_to_marzpay(payment, phone, float(total_amount))
+
+# #     if error:
+# #         payment.status = PaymentStatus.FAILED.value
+# #         db.session.commit()
+# #         return jsonify(error), 502
+
+# #     if marz_data and marz_data.get('status') == 'success':
+# #         payment.external_ref = marz_data.get('data', {}).get('transaction', {}).get('uuid')
+# #         payment.status = PaymentStatus.PENDING.value
+# #         db.session.commit()
+# #         return jsonify({
+# #             "success": True,
+# #             "status": "success",
+# #             "reference": payment.reference,
+# #             "payment_type": "media_star",
+# #             "subscription": package_name,
+# #             "amount": float(amount),
+# #             "service_charge": float(service_charge),
+# #             "total": float(total_amount),
+# #             "message": f"Media Star {package_name} subscription initiated"
+# #         }), 200
+# #     else:
+# #         payment.status = PaymentStatus.FAILED.value
+# #         db.session.commit()
+# #         return jsonify({
+# #             "status": "failed",
+# #             "error": "Payment gateway error"
+# #         }), 400
+
+
+# # # ============================================================
+# # # CARD PAYMENT HANDLER
+# # # ============================================================
+
+# # def handle_card_payment(user, validated):
+# #     """Handle card payments - routes to ZENGAPAY via package handler"""
+# #     print("=" * 80)
+# #     print(f"🔵 CARD PAYMENT - Routing to ZENGAPAY")
+# #     print("=" * 80)
+
+# #     try:
+# #         return handle_package_payment(user, validated)
+# #     except Exception as e:
+# #         logger.error(f"Card payment error: {str(e)}")
+# #         return jsonify({"error": f"Card payment failed: {str(e)}"}), 500
+
+
+# # # ============================================================
+# # # PACKAGE PAYMENT HANDLER
+# # # ============================================================
+
+# # def handle_package_payment(user, validated):
+# #     """Handle package payments using ZENGAPAY as primary gateway"""
+# #     print("=" * 80)
+# #     print(f"🔵 PACKAGE PAYMENT - ZENGAPAY Gateway (Env: {ZENGAPAY_ENVIRONMENT})")
+# #     print("=" * 80)
+
+# #     try:
+# #         amount = validated['amount']
+# #         phone = validated['phone']
+# #         package_obj = validated['package_obj']
+
+# #         print("🔍 Step 1: Checking for existing pending payment...")
+# #         existing = handle_existing_payment(user, amount, 'package')
+# #         if existing:
+# #             print(f"⚠️ Existing pending payment found: ID={existing.id}")
+# #             return jsonify({
+# #                 "success": True,
+# #                 "message": "Payment already in progress",
+# #                 "data": {
+# #                     "payment_id": existing.id,
+# #                     "reference": existing.reference,
+# #                     "status": existing.status,
+# #                     "provider": existing.provider or "zengapay"
+# #                 }
+# #             }), 200
+
+# #         print("🔍 Step 2: Initiating ZENGAPAY payment...")
+# #         result, error = initiate_zengapay_collection(
+# #             user=user,
+# #             amount=amount,
+# #             phone=phone,
+# #             package=package_obj,
+# #             payment_type='package'
+# #         )
+
+# #         if error:
+# #             print(f"❌ ZENGAPAY initiation failed: {error}")
+# #             return jsonify({"error": f"Payment failed: {error}"}), 400
+
+# #         print("✅ ZENGAPAY payment initiated successfully")
+# #         return jsonify({
+# #             "success": True,
+# #             "message": "Payment initiated successfully",
+# #             "data": result
+# #         }), 200
+
+# #     except Exception as e:
+# #         logger.error(f"Package payment error: {str(e)}")
+# #         import traceback
+# #         traceback.print_exc()
+# #         return jsonify({"error": f"Payment processing failed: {str(e)}"}), 500
+
+
+# # # ============================================================
+# # # DEPOSIT PAYMENT HANDLER
+# # # ============================================================
+
+# # def handle_deposit_payment(user, validated):
+# #     """Handle deposit payments using ZENGAPAY as primary gateway"""
+# #     print("=" * 80)
+# #     print(f"🔵 DEPOSIT PAYMENT - ZENGAPAY Gateway (Env: {ZENGAPAY_ENVIRONMENT})")
+# #     print("=" * 80)
+
+# #     try:
+# #         amount = validated['amount']
+# #         phone = validated['phone']
+
+# #         print("🔍 Step 1: Checking for existing pending payment...")
+# #         existing = handle_existing_payment(user, amount, 'deposit')
+# #         if existing:
+# #             print(f"⚠️ Existing pending payment found: ID={existing.id}")
+# #             return jsonify({
+# #                 "success": True,
+# #                 "message": "Payment already in progress",
+# #                 "data": {
+# #                     "payment_id": existing.id,
+# #                     "reference": existing.reference,
+# #                     "status": existing.status,
+# #                     "provider": existing.provider or "zengapay"
+# #                 }
+# #             }), 200
+
+# #         print("🔍 Step 2: Initiating ZENGAPAY deposit...")
+# #         result, error = initiate_zengapay_collection(
+# #             user=user,
+# #             amount=amount,
+# #             phone=phone,
+# #             package=None,
+# #             payment_type='deposit'
+# #         )
+
+# #         if error:
+# #             print(f"❌ ZENGAPAY initiation failed: {error}")
+# #             return jsonify({"error": f"Payment failed: {error}"}), 400
+
+# #         print("✅ ZENGAPAY deposit initiated successfully")
+# #         return jsonify({
+# #             "success": True,
+# #             "message": "Deposit initiated successfully",
+# #             "data": result
+# #         }), 200
+
+# #     except Exception as e:
+# #         logger.error(f"Deposit payment error: {str(e)}")
+# #         import traceback
+# #         traceback.print_exc()
+# #         return jsonify({"error": f"Payment processing failed: {str(e)}"}), 500
+
+
+# # # ============================================================
+# # # WALLET PAYMENT HANDLER
+# # # ============================================================
+
+# # def process_wallet_package_payment(user, package_obj, amount):
+# #     """Process package payment using internal wallet balance"""
+# #     print("=" * 60)
+# #     print("💰 WALLET PACKAGE PAYMENT - STARTED")
+# #     print("=" * 60)
+
+# #     try:
+# #         from blueprints.withdraw_helpers import WithdrawalValidator
+
+# #         mature_wallet = WithdrawalValidator._get_mature_wallet_balance(user)
+# #         actual_balance = Decimal(str(user.actual_balance or 0))
+# #         amount_to_deduct = Decimal(str(amount))
+
+# #         if actual_balance >= amount_to_deduct:
+# #             user.actual_balance = float(actual_balance - amount_to_deduct)
+# #             deducted_from = "actual_balance"
+# #         else:
+# #             remaining = amount_to_deduct - actual_balance
+# #             user.actual_balance = 0
+# #             user.actual_balance = float(actual_balance - amount_to_deduct)
+# #             deducted_from = "combined_balance"
+
+# #         payment = Payment(
+# #             user_id=user.id,
+# #             reference=str(uuid.uuid4()),
+# #             amount=amount,
+# #             currency="UGX",
+# #             phone_number=user.phone or "wallet",
+# #             provider="wallet",
+# #             status=PaymentStatus.COMPLETED.value,
+# #             method="Wallet",
+# #             external_ref=str(uuid.uuid4()),
+# #             payment_type="package",
+# #             transaction_type=TransactionType.PACKAGE,
+# #             package_catalog_id=package_obj.id,
+# #             verified=True,
+# #             raw_response=json.dumps({
+# #                 "wallet_payment": True,
+# #                 "deducted_from": deducted_from,
+# #                 "previous_balance": float(actual_balance + mature_wallet)
+# #             })
+# #         )
+# #         db.session.add(payment)
+# #         db.session.flush()
+
+# #         from blueprints.payments_helpers import activate_user_package
+# #         activated = activate_user_package(user.id, package_obj.id)
+
+# #         if activated:
+# #             db.session.commit()
+# #             print(f"✅ Wallet payment successful: Package {package_obj.name} activated")
+
+# #             return jsonify({
+# #                 "success": True,
+# #                 "message": f"Package {package_obj.name} activated successfully using wallet balance",
+# #                 "data": {
+# #                     "payment_id": payment.id,
+# #                     "reference": payment.reference,
+# #                     "package": package_obj.name,
+# #                     "amount": str(amount),
+# #                     "new_balance": float(user.actual_balance or 0)
+# #                 }
+# #             }), 200
+# #         else:
+# #             db.session.rollback()
+# #             return jsonify({"error": "Failed to activate package"}), 500
+
+# #     except Exception as e:
+# #         db.session.rollback()
+# #         print(f"❌ Wallet payment error: {str(e)}")
+# #         return jsonify({"error": f"Wallet payment failed: {str(e)}"}), 500
+
+
+# # # ============================================================
+# # # MAIN PAYMENT INITIATION ENDPOINT
+# # # ============================================================
+
+# # @bp.route("/payments/initiate", methods=['POST'])
+# # def initiate_payment_route():
+# #     """Main payment initiation endpoint - ZENGAPAY primary, MarzPay fallback"""
+# #     print("=" * 80)
+# #     print(f"🔵 PAYMENT INITIATION STARTED (Gateway: {PRIMARY_GATEWAY})")
+# #     print(f"   Environment: {ZENGAPAY_ENVIRONMENT}")
+# #     print("=" * 80)
+
+# #     try:
+# #         print("🔍 Step 1: Authenticating user...")
+# #         user = get_authenticated_user()
+# #         if not user:
+# #             print("❌ Authentication failed")
+# #             return jsonify({"error": "Unauthorized"}), 401
+# #         print(f"✅ User authenticated: ID={user.id}")
+
+# #         print("🔍 Step 2: Getting JSON data...")
+# #         data = request.get_json()
+# #         print(f"📥 Raw data received: {data}")
+
+# #         if not data:
+# #             print("❌ No data received")
+# #             return jsonify({"error": "Invalid JSON"}), 400
+
+# #         print("🔍 Step 3: Validating input...")
+# #         try:
+# #             validated, error = validate_payment_input(data)
+# #             print(f"📥 Validated data: {validated}")
+# #             print(f"📥 Validation error: {error}")
+# #         except Exception as e:
+# #             print(f"❌ Validation exception: {type(e).__name__}: {e}")
+# #             import traceback
+# #             traceback.print_exc()
+# #             return jsonify({"error": f"Validation failed: {str(e)}"}), 400
+
+# #         if error:
+# #             print(f"❌ Validation failed: {error}")
+# #             return error
+# #         print(f"✅ Validation successful")
+
+# #         payment_method = validated.get("payment_method", "mobile")
+# #         utility_code = validated.get("utility_code", "")
+# #         payment_type = validated.get("payment_type", "")
+
+# #         print(f"🔍 Step 4: Routing payment (type={payment_type}, method={payment_method})")
+
+# #         if utility_code == 'MEDIA_STAR' or validated.get("payment_type") == "media_star":
+# #             print("🔀 Routing to MEDIA_STAR handler")
+# #             return handle_media_star_payment(user, validated)
+
+# #         else:
+# #             print("🔀 Routing to ZENGAPAY gateway")
+
+# #             if validated["payment_type"] == "package":
+# #                 return handle_package_payment(user, validated)
+
+# #             elif validated["payment_type"] == "deposit":
+# #                 return handle_deposit_payment(user, validated)
+
+# #             elif payment_method == "card":
+# #                 return handle_card_payment(user, validated)
+
+# #             else:
+# #                 print(f"❌ Invalid payment type: {validated.get('payment_type')}")
+# #                 return jsonify({"error": "Invalid payment type"}), 400
+
+# #     except KeyError as e:
+# #         print(f"❌ KeyError: {e}")
+# #         import traceback
+# #         traceback.print_exc()
+# #         return jsonify({"error": f"Missing required field: {e}"}), 400
+# #     except Exception as e:
+# #         db.session.rollback()
+# #         print(f"❌ EXCEPTION: {type(e).__name__}: {e}")
+# #         import traceback
+# #         traceback.print_exc()
+# #         return jsonify({"error": f"Payment processing failed: {str(e)}"}), 500
+
+
+# # # ============================================================
+# # # ZENGAPAY WEBHOOK ENDPOINT
+# # # ============================================================
+# # @bp.route("/payments/zengapay-webhook", methods=['POST'])
+# # def zengapay_webhook():
+# #     """
+# #     Handle ZENGAPAY webhook with correct signature verification
+# #     """
+# #     print("=" * 80)
+# #     print("🔵 ZENGAPAY WEBHOOK RECEIVED")
+# #     print("=" * 80)
+
+# #     try:
+# #         # 1. Get the JSON payload
+# #         data = request.get_json()
+# #         received_signature = request.headers.get('X-ZENGAPAY-SIGNATURE')
+        
+# #         print(f"📥 Payload: {json.dumps(data, indent=2)}")
+# #         print(f"📥 Signature: {received_signature}")
+        
+# #         # 2. Verify signature
+# #         if not received_signature:
+# #             logger.error("❌ Missing signature header")
+# #             return jsonify({"error": "Missing signature"}), 401
+        
+# #         secret_hash = os.environ.get('ZENGAPAY_WEBHOOK_SECRET')
+# #         if not secret_hash:
+# #             logger.error("❌ ZENGAPAY_WEBHOOK_SECRET not configured")
+# #             return jsonify({"error": "Server configuration error"}), 500
+        
+# #         # 3. Extract fields and verify signature (using the working method)
+# #         transaction_data = data.get('data', {})
+# #         tx_ref = transaction_data.get('transactionReference')
+# #         msisdn = transaction_data.get('msisdn')
+# #         amount = transaction_data.get('amount')
+        
+# #         if not all([tx_ref, msisdn, amount is not None]):
+# #             logger.error("❌ Missing required fields for signature verification")
+# #             return jsonify({"error": "Missing fields"}), 400
+        
+# #         # Build signature string (NO separators!)
+# #         signature_string = f"{tx_ref}{msisdn}{amount}"
+# #         import hmac
+# #         import hashlib
+# #         # Calculate expected signature
+# #         expected_signature = hmac.new(
+# #             secret_hash.encode('utf-8'),
+# #             signature_string.encode('utf-8'),
+# #             hashlib.sha256
+# #         ).hexdigest()
+        
+# #         print(f"🔑 Signature string: {signature_string}")
+# #         print(f"✅ Expected: {expected_signature}")
+        
+# #         # 4. Compare signatures
+# #         if not hmac.compare_digest(expected_signature, received_signature):
+# #             logger.error("❌ WEBHOOK REJECTED: Invalid signature")
+# #             logger.error(f"   Expected: {expected_signature}")
+# #             logger.error(f"   Received: {received_signature}")
+# #             return jsonify({"error": "Invalid signature"}), 401
+        
+# #         print("✅ Signature verified successfully!")
+
+# #         # 5. Process the webhook
+# #         event_type = data.get('event', '')
+        
+# #         if not tx_ref:
+# #             logger.error("Webhook missing transactionReference")
+# #             return jsonify({"error": "Missing transactionReference"}), 400
+
+# #         # Find payment by external_ref
+# #         payment = Payment.query.filter_by(external_ref=tx_ref).first()
+
+# #         if not payment:
+# #             logger.warning(f"Payment not found for transactionRef: {tx_ref}")
+# #             return jsonify({"error": "Payment not found"}), 404
+
+# #         # Update payment based on event type
+# #         if 'success' in event_type.lower():
+# #             new_status = PaymentStatus.COMPLETED.value
+# #             payment.verified = True
+
+# #             if payment.package_catalog_id:
+# #                 from blueprints.payments_helpers import activate_user_package
+# #                 activate_user_package(payment.user_id, payment.package_catalog_id)
+
+# #         elif 'failed' in event_type.lower():
+# #             new_status = PaymentStatus.FAILED.value
+# #         else:
+# #             new_status = PaymentStatus.PENDING.value
+
+# #         payment.status = new_status
+# #         payment.raw_response = json.dumps(data)
+# #         db.session.commit()
+
+# #         logger.info(f"✅ Webhook processed: {event_type} for {tx_ref}")
+        
+# #         return jsonify({"status": "success", "message": "Webhook processed"}), 200
+
+# #     except Exception as e:
+# #         logger.error(f"Webhook processing error: {str(e)}")
+# #         import traceback
+# #         traceback.print_exc()
+# #         return jsonify({"error": "Webhook processing failed"}), 500
+
+# # # ============================================================
+# # # ZENGAPAY STATUS CHECK ENDPOINT
+# # # ============================================================
+
+# # @bp.route("/payments/zengapay-status/<transaction_reference>", methods=['GET'])
+# # def zengapay_status(transaction_reference):
+# #     """Check ZENGAPAY transaction status"""
+# #     print(f"🔍 Checking ZENGAPAY status for: {transaction_reference}")
+
+# #     try:
+# #         user = get_authenticated_user()
+# #         if not user:
+# #             return jsonify({"error": "Unauthorized"}), 401
+
+# #         status_data, error = check_zengapay_transaction_status(transaction_reference)
+
+# #         if error:
+# #             return jsonify({"error": error}), 400
+
+# #         return jsonify({
+# #             "success": True,
+# #             "data": status_data
+# #         }), 200
+
+# #     except Exception as e:
+# #         logger.error(f"Status check error: {str(e)}")
+# #         return jsonify({"error": f"Status check failed: {str(e)}"}), 500
+
+
+# # # ============================================================
+# # # ZENGAPAY BALANCE CHECK ENDPOINT
+# # # ============================================================
+
+# # @bp.route("/payments/zengapay-balance", methods=['GET'])
+# # def zengapay_balance():
+# #     """Get ZENGAPAY wallet balance (Admin only)"""
+# #     print("=" * 80)
+# #     print("🔵 ZENGAPAY BALANCE CHECK")
+# #     print("=" * 80)
+
+# #     try:
+# #         user = get_authenticated_user()
+# #         if not user:
+# #             return jsonify({"error": "Unauthorized"}), 401
+
+# #         if not getattr(user, 'is_admin', False):
+# #             return jsonify({"error": "Admin access required"}), 403
+
+# #         result, error = get_zengapay_balance()
+
+# #         if error:
+# #             return jsonify({"error": error}), 400
+
+# #         return jsonify({
+# #             "success": True,
+# #             "data": result
+# #         }), 200
+
+# #     except Exception as e:
+# #         logger.error(f"Balance check error: {str(e)}")
+# #         return jsonify({"error": f"Balance check failed: {str(e)}"}), 500
+
+
+# # # ============================================================
+# # # CALLBACK ENDPOINT (MarzPay Fallback)
+# # # ============================================================
+
+# # @bp.route("/payments/callback", methods=['GET', 'POST'])
+# # def payment_callback():
+# #     """Unified callback handler - primarily for MarzPay fallback"""
+# #     print("=" * 60)
+# #     print("📞 PAYMENT CALLBACK RECEIVED")
+# #     print(f"Method: {request.method}")
+# #     print("=" * 60)
+
+# #     try:
+# #         if request.method == 'POST' and request.is_json:
+# #             data = request.get_json()
+# #             print(f"📥 Callback Data: {json.dumps(data, indent=2)}")
+
+# #             if data and 'transaction_id' in data:
+# #                 return handle_marzpay_callback(data)
+
+# #         elif request.method == 'GET':
+# #             status = request.args.get('status')
+# #             reference = request.args.get('reference')
+# #             if status and reference:
+# #                 return handle_marzpay_callback({
+# #                     'status': status,
+# #                     'reference': reference,
+# #                     'transaction_id': request.args.get('transaction_id')
+# #                 })
+
+# #         return jsonify({"error": "Unsupported callback type"}), 400
+
+# #     except Exception as e:
+# #         logger.error(f"Callback processing error: {str(e)}")
+# #         import traceback
+# #         traceback.print_exc()
+# #         return jsonify({"error": "Callback processing failed"}), 500
+
+
+# # def handle_marzpay_callback(data):
+# #     """Handle MarzPay callback (fallback)"""
+# #     print("🔵 Processing MarzPay callback")
+# #     return jsonify({"status": "OK"}), 200
+
+
+# # # ============================================================
+# # # PAYMENT STATUS ENDPOINT
+# # # ============================================================
+
+# # @bp.route("/payments/status/<reference>", methods=['GET'])
+# # def get_payment_status(reference):
+# #     """Get payment status by reference"""
+# #     print(f"🔍 Checking payment status for reference: {reference}")
+
+# #     try:
+# #         payment = Payment.query.filter_by(reference=reference).first()
+# #         if not payment:
+# #             return jsonify({"error": "Payment not found"}), 404
+
+# #         response = {
+# #             "reference": payment.reference,
+# #             "status": payment.status,
+# #             "amount": str(payment.amount),
+# #             "currency": payment.currency,
+# #             "provider": payment.provider or PRIMARY_GATEWAY,
+# #             "method": payment.method,
+# #             "verified": payment.verified,
+# #             "created_at": payment.created_at.isoformat() if payment.created_at else None,
+# #             "updated_at": payment.updated_at.isoformat() if hasattr(payment, 'updated_at') and payment.updated_at else None
+# #         }
+
+# #         if payment.external_ref:
+# #             response["external_ref"] = payment.external_ref
+
+# #         return jsonify(response), 200
+
+# #     except Exception as e:
+# #         logger.error(f"Status check error: {str(e)}")
+# #         return jsonify({"error": "Status check failed"}), 500
+
+
+# # # ============================================================
+# # # PAYMENT CONFIGURATION ENDPOINT
+# # # ============================================================
+
+# # @bp.route("/payments/config", methods=['GET'])
+# # def get_payment_config():
+# #     """Get payment gateway configuration for frontend"""
+# #     return jsonify({
+# #         "primary_gateway": PRIMARY_GATEWAY,
+# #         "environment": ZENGAPAY_ENVIRONMENT,
+# #         "supported_methods": ["mobile", "card"],
+# #         "supports_redirect": False,
+# #         "supports_ipn": True
+# #     }), 200
+
+
+# # # ============================================================
+# # # ZENGAPAY WITHDRAWAL HANDLER
+# # # ============================================================
+
+# # def handle_zengapay_withdrawal(user, validated):
+# #     """
+# #     Handle withdrawal using ZENGAPAY as primary gateway
+# #     MarzPay as fallback if ZENGAPAY fails
+# #     """
+# #     print("=" * 80)
+# #     print(f"🔵 ZENGAPAY WITHDRAWAL - Primary Gateway (Env: {ZENGAPAY_ENVIRONMENT})")
+# #     print("=" * 80)
+
+# #     try:
+# #         amount = validated['amount']
+# #         phone = validated['phone']
+# #         payment_type = validated.get('payment_type', 'withdrawal')
+# #         reason = validated.get('reason', 'Customer withdrawal')
+# #         recipient_phone = validated.get('recipient_phone')
+
+# #         if payment_type == 'send_money':
+# #             target_phone = recipient_phone or phone
+# #         else:
+# #             target_phone = phone
+
+# #         idempotency_key = validated.get('idempotency_key')
+# #         if not idempotency_key:
+# #             import hashlib
+# #             key_material = f"{user.id}:{amount}:{target_phone}:{datetime.now().date()}"
+# #             idempotency_key = hashlib.sha256(key_material.encode()).hexdigest()
+
+# #         print(f"🔍 Step 1: Processing withdrawal internally...")
+# #         print(f"   Amount: {amount} UGX")
+# #         print(f"   Phone: {target_phone}")
+# #         print(f"   Type: {payment_type}")
+
+# #         success, message, withdrawal_data = WithdrawalProcessor.process_withdrawal_request(
+# #             user.id,
+# #             amount,
+# #             target_phone,
+# #             idempotency_key
+# #         )
+
+# #         if not success:
+# #             print(f"❌ Internal withdrawal failed: {message}")
+# #             return jsonify({"error": message}), 400
+
+# #         if withdrawal_data.get('already_processed'):
+# #             print(f"⚠️ Withdrawal already processed: {withdrawal_data['reference']}")
+# #             return jsonify({
+# #                 "success": True,
+# #                 "message": message,
+# #                 "withdrawal_id": withdrawal_data['reference'],
+# #                 "already_processed": True
+# #             }), 200
+
+# #         # ============================================================
+# #         # PRIMARY: ZENGAPAY TRANSFER
+# #         # ============================================================
+# #         print("🔍 Step 2: Initiating ZENGAPAY transfer (Primary)...")
+        
+# #         trans_id = withdrawal_data['reference'][:20]
+# #         amount_to_send = int(float(withdrawal_data['net_amount']))
+
+# #         # Clean phone number for ZENGAPAY (without +)
+# #         phone_clean = re.sub(r'[^0-9]', '', str(target_phone))
+# #         if not phone_clean.startswith('256'):
+# #             if phone_clean.startswith('0'):
+# #                 phone_clean = '256' + phone_clean[1:]
+# #             else:
+# #                 phone_clean = '256' + phone_clean[-9:]
+
+# #         print(f"   Trans ID: {trans_id}")
+# #         print(f"   Amount: {amount_to_send} UGX")
+# #         print(f"   Phone: {phone_clean}")
+
+# #         # Call ZENGAPAY Transfer API
+# #         zengapay_result, zengapay_error = _zengapay_client.initiate_transfer(
+# #             msisdn=phone_clean,
+# #             amount=amount_to_send,
+# #             external_reference=trans_id,
+# #             narration=reason or f"Withdrawal for user {user.id}"
+# #         )
+
+# #         # ============================================================
+# #         # FALLBACK: MarzPay if ZENGAPAY fails
+# #         # ============================================================
+# #         if zengapay_error:
+# #             print(f"⚠️ ZENGAPAY transfer failed: {zengapay_error}")
+# #             print("🔄 Falling back to MarzPay...")
+            
+# #             # Reverse the internal withdrawal (since ZENGAPAY failed)
+# #             WithdrawalProcessor.fail_withdrawal(
+# #                 withdrawal_data['withdrawal_id'],
+# #                 user.id,
+# #                 amount,
+# #                 withdrawal_data.get('balances', {})
+# #             )
+            
+# #             # Re-process with MarzPay
+# #             return handle_marzpay_withdrawal_fallback(user, validated, withdrawal_data)
+
+# #         # ============================================================
+# #         # ZENGAPAY SUCCESS
+# #         # ============================================================
+# #         print("✅ ZENGAPAY transfer initiated successfully")
+        
+# #         transaction_reference = zengapay_result.get('transactionReference')
+        
+# #         # Update withdrawal with ZENGAPAY reference
+# #         from blueprints.withdraw_helpers import WithdrawalRecordManager
+# #         WithdrawalRecordManager.update_status(
+# #             withdrawal_data['withdrawal_id'],
+# #             "processing",
+# #             external_ref=transaction_reference or trans_id
+# #         )
+# #         db.session.commit()
+
+# #         return jsonify({
+# #             "success": True,
+# #             "message": "Withdrawal request submitted successfully via ZENGAPAY",
+# #             "withdrawal_id": withdrawal_data['reference'],
+# #             "transaction_reference": transaction_reference,
+# #             "provider": "zengapay",
+# #             "amount": str(amount_to_send),
+# #             "fee": str(withdrawal_data.get('fee', '0')),
+# #             "net_amount": str(withdrawal_data.get('net_amount', amount)),
+# #             "status": "processing"
+# #         }), 200
+
+# #     except WithdrawalException as e:
+# #         print(f"❌ Withdrawal processing error: {str(e)}")
+# #         return jsonify({"error": str(e)}), 400
+
+# #     except Exception as e:
+# #         print(f"❌ Unexpected error: {str(e)}")
+# #         import traceback
+# #         traceback.print_exc()
+
+# #         if 'withdrawal_data' in locals():
+# #             try:
+# #                 WithdrawalProcessor.fail_withdrawal(
+# #                     withdrawal_data['withdrawal_id'],
+# #                     user.id,
+# #                     amount,
+# #                     withdrawal_data.get('balances', {})
+# #                 )
+# #             except:
+# #                 pass
+
+# #         return jsonify({
+# #             "error": "Withdrawal processing failed",
+# #             "details": str(e)
+# #         }), 500
+
+# # def handle_marzpay_withdrawal_fallback(user, validated, withdrawal_data):
+# #     """Handle withdrawal using MarzPay as fallback"""
+# #     print("=" * 80)
+# #     print(f"🔵 MARZPAY WITHDRAWAL - Fallback")
+# #     print("=" * 80)
+
+# #     try:
+# #         amount = validated['amount']
+# #         phone = validated['phone']
+# #         payment_type = validated.get('payment_type', 'withdrawal')
+# #         recipient_phone = validated.get('recipient_phone')
+
+# #         if payment_type == 'send_money':
+# #             target_phone = recipient_phone or phone
+# #         else:
+# #             target_phone = phone
+
+# #         formatted_phone = target_phone.strip()
+# #         if formatted_phone.startswith('0'):
+# #             formatted_phone = f"+256{formatted_phone[1:]}"
+# #         elif formatted_phone.startswith('256'):
+# #             formatted_phone = f"+{formatted_phone}"
+# #         elif not formatted_phone.startswith('+'):
+# #             formatted_phone = f"+256{formatted_phone[-9:]}"
+
+# #         callback_url = "https://express.online/withdraw/callback"
+
+# #         payload = {
+# #             "reference": withdrawal_data['reference'],
+# #             "amount": withdrawal_data['net_amount'],
+# #             "phone_number": formatted_phone,
+# #             "country": "UG",
+# #             "description": "customer_withdraw",
+# #             "callback_url": callback_url,
+# #         }
+
+# #         if payment_type == "send_money":
+# #             payload["metadata"] = {
+# #                 "payment_type": "send_money",
+# #                 "recipient_name": validated.get("recipient_name", ""),
+# #                 "sender_id": user.id
+# #             }
+
+# #         print(f"🔹 MarzPay payload: {json.dumps(payload, indent=2)}")
+
+# #         headers = {
+# #             "Authorization": f"Basic {os.environ.get('MARZ_AUTH_HEADER')}",
+# #             "Content-Type": "application/json"
+# #         }
+
+# #         response = requests.post(
+# #             f"{MARZ_BASE_URL}/send-money",
+# #             json=payload,
+# #             headers=headers,
+# #             timeout=60
+# #         )
+
+# #         response.raise_for_status()
+# #         marz_data = response.json()
+
+# #         transaction_status = marz_data.get('data', {}).get('transaction', {}).get('status')
+# #         transaction_uuid = marz_data.get('data', {}).get('transaction', {}).get('uuid')
+
+# #         if transaction_status in ['pending', 'processing']:
+# #             from blueprints.withdraw_helpers import WithdrawalRecordManager
+# #             WithdrawalRecordManager.update_status(
+# #                 withdrawal_data['withdrawal_id'],
+# #                 "processing",
+# #                 external_ref=transaction_uuid
+# #             )
+# #             db.session.commit()
+
+# #             return jsonify({
+# #                 "success": True,
+# #                 "message": "Withdrawal request submitted successfully",
+# #                 "withdrawal_id": withdrawal_data['reference'],
+# #                 "marz_response": marz_data,
+# #                 "net_amount": str(withdrawal_data.get('net_amount', amount)),
+# #                 "fee": str(withdrawal_data.get('fee', '0'))
+# #             }), 200
+# #         else:
+# #             raise Exception(f"MarzPay returned status: {marz_data.get('status')}")
+
+# #     except requests.exceptions.RequestException as e:
+# #         print(f"MarzPay request error: {str(e)}")
+# #         if 'withdrawal_data' in locals():
+# #             WithdrawalProcessor.fail_withdrawal(
+# #                 withdrawal_data['withdrawal_id'],
+# #                 user.id,
+# #                 amount,
+# #                 withdrawal_data.get('balances', {})
+# #             )
+# #         return jsonify({
+# #             "error": "Payment gateway unavailable",
+# #             "details": str(e)
+# #         }), 502
+
+# #     except Exception as e:
+# #         print(f"MarzPay withdrawal error: {str(e)}")
+# #         if 'withdrawal_data' in locals():
+# #             WithdrawalProcessor.fail_withdrawal(
+# #                 withdrawal_data['withdrawal_id'],
+# #                 user.id,
+# #                 amount,
+# #                 withdrawal_data.get('balances', {})
+# #             )
+# #         return jsonify({"error": str(e)}), 500
+
+
+# # # ============================================================
+# # # UNIFIED WITHDRAWAL ROUTE
+# # # ============================================================
+
+# # @bp.route("/payments/withdraw", methods=["POST"])
+# # def withdraw():
+# #     """Unified withdrawal endpoint - ZENGAPAY primary, MarzPay fallback"""
+# #     print("=" * 80)
+# #     print(f"🔵 WITHDRAWAL REQUEST RECEIVED (Gateway: {PRIMARY_GATEWAY})")
+# #     print("=" * 80)
+# #     return jsonify({"success": "Withdraw sucessful"}), 200
+
+# #     try:
+# #         from blueprints.payments_helpers import validate_withdrawal_input
+
+# #         print("🔍 Step 1: Authenticating user...")
+# #         user = get_authenticated_user()
+# #         if not user:
+# #             print("❌ Authentication failed")
+# #             return jsonify({"error": "User not authenticated"}), 401
+# #         print(f"✅ User authenticated: ID={user.id}")
+
+# #         print("🔍 Step 2: Getting JSON data...")
+# #         data = request.get_json(force=True, silent=True)
+
+# #         if not data:
+# #             return jsonify({"error": "Invalid JSON"}), 400
+
+# #         print(f"📥 Data received: {data}")
+
+# #         print("🔍 Step 3: Validating withdrawal input...")
+# #         validated, error = validate_withdrawal_input(data)
+
+# #         if error:
+# #             print(f"❌ Validation failed: {error}")
+# #             return error
+# #         print(f"✅ Validation successful")
+
+# #         print(f"🔍 Step 4: Routing withdrawal (Gateway: {PRIMARY_GATEWAY})")
+
+# #         # Use ZENGAPAY if available, otherwise fallback to MarzPay
+# #         if PRIMARY_GATEWAY == 'zengapay':
+# #             print("🔀 Routing to ZENGAPAY withdrawal")
+# #             return handle_zengapay_withdrawal(user, validated)
+# #         else:
+# #             print("🔀 Routing to MarzPay withdrawal (fallback)")
+# #             return handle_marzpay_withdrawal_fallback(user, validated, {})
+
+# #     except Exception as e:
+# #         print(f"❌ EXCEPTION: {type(e).__name__}: {e}")
+# #         import traceback
+# #         traceback.print_exc()
+# #         return jsonify({"error": f"Withdrawal processing failed: {str(e)}"}), 500
+
+
+# # # ============================================================
+# # # WITHDRAWAL HISTORY ENDPOINT
+# # # ============================================================
+
+# # @bp.route("/payments/withdraw/history", methods=["GET"])
+# # def withdrawal_history():
+# #     """Get user's withdrawal history"""
+# #     user_id = session.get("user_id")
+# #     if not user_id:
+# #         return jsonify({"error": "User not authenticated"}), 401
+
+# #     try:
+# #         limit = request.args.get('limit', 10, type=int)
+# #         withdrawals = WithdrawalQueryHelper.get_user_withdrawals(user_id, limit)
+
+# #         withdrawal_list = []
+# #         for withdrawal in withdrawals:
+# #             withdrawal_list.append({
+# #                 'id': withdrawal.id,
+# #                 'amount': str(withdrawal.amount),
+# #                 'net_amount': str(withdrawal.net_amount) if withdrawal.net_amount else None,
+# #                 'fee': str(withdrawal.fee) if withdrawal.fee else None,
+# #                 'phone': withdrawal.phone,
+# #                 'status': withdrawal.status,
+# #                 'external_ref': withdrawal.external_ref,
+# #                 'external_txid': withdrawal.external_txid,
+# #                 'created_at': withdrawal.created_at.isoformat() if withdrawal.created_at else None,
+# #                 'updated_at': withdrawal.updated_at.isoformat() if withdrawal.updated_at else None
+# #             })
+
+# #         return jsonify({
+# #             "success": True,
+# #             "withdrawals": withdrawal_list,
+# #             "total": len(withdrawal_list)
+# #         }), 200
+
+# #     except Exception as e:
+# #         print(f"Error fetching withdrawal history: {str(e)}", flush=True)
+# #         return jsonify({"error": "Failed to fetch withdrawal history"}), 500
+
+
+# # # ============================================================
+# # # WITHDRAWAL LIMITS ENDPOINT
+# # # ============================================================
+
+# # @bp.route("/payments/withdraw/limits", methods=["GET"])
+# # def withdrawal_limits():
+# #     """Get withdrawal limits and configuration"""
+# #     return jsonify({
+# #         "success": True,
+# #         "limits": {
+# #             "min_withdrawal": str(WithdrawalConfig.MIN_WITHDRAWAL),
+# #             "max_withdrawal": str(WithdrawalConfig.MAX_WITHDRAWAL),
+# #             "processing_fee_percent": str(WithdrawalConfig.PROCESSING_FEE_PERCENT),
+# #             "hold_period_hours": WithdrawalConfig.HOLD_PERIOD_HOURS
+# #         }
+# #     }), 200
+
+
+# # # ============================================================
+# # # WITHDRAWAL STATUS ENDPOINT
+# # # ============================================================
+
+# # @bp.route("/payments/withdraw/<withdrawal_id>", methods=["GET"])
+# # def get_withdrawal_status(withdrawal_id):
+# #     """Get specific withdrawal status"""
+# #     user_id = session.get("user_id")
+# #     if not user_id:
+# #         return jsonify({"error": "User not authenticated"}), 401
+
+# #     try:
+# #         withdrawal = Withdrawal.query.filter_by(
+# #             id=withdrawal_id,
+# #             user_id=user_id        ).first()
+
+# #         if not withdrawal:
+# #             return jsonify({"error": "Withdrawal not found"}), 404
+
+# #         return jsonify({
+# #             "success": True,
+# #             "withdrawal": {
+# #                 'id': withdrawal.id,
+# #                 'amount': str(withdrawal.amount),
+# #                 'net_amount': str(withdrawal.net_amount) if withdrawal.net_amount else None,
+# #                 'fee': str(withdrawal.fee) if withdrawal.fee else None,
+# #                 'phone': withdrawal.phone,
+# #                 'status': withdrawal.status,
+# #                 'external_ref': withdrawal.external_ref,
+# #                 'external_txid': withdrawal.external_txid,
+# #                 'created_at': withdrawal.created_at.isoformat() if withdrawal.created_at else None,
+# #                 'updated_at': withdrawal.updated_at.isoformat() if withdrawal.updated_at else None
+# #             }
+# #         }), 200
+
+# #     except Exception as e:
+# #         print(f"Error fetching withdrawal status: {str(e)}", flush=True)
+# #         return jsonify({"error": "Failed to fetch withdrawal status"}), 500

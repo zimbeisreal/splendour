@@ -1,0 +1,489 @@
+/* ============================================================
+   SKYLINE — AUTH PAGE (Midnight Card)
+   Deep blue · Electric cyan · White
+   Compact, single-viewport, mobile-first
+   ============================================================ */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --sky-blue:      #0A1A3C;
+  --sky-blue-2:    #0E2450;
+  --sky-blue-3:    #12305F;
+  --sky-cyan:      #22D3EE;
+  --sky-cyan-deep: #06B6D4;
+  --sky-white:     #FFFFFF;
+  --sky-soft:      #A9C1E8;
+  --sky-muted:     #6B85B5;
+  --sky-line:      rgba(255, 255, 255, 0.08);
+  --sky-success:   #22C55E;
+  --sky-error:     #FF5A6E;
+  --sky-warn:      #FFB300;
+  --sky-info:      #38BDF8;
+
+  --sky-r:         16px;
+  --sky-r-sm:      11px;
+  --sky-r-pill:    999px;
+
+  --sky-font:      'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--sky-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  color: var(--sky-white);
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 20% 0%,   rgba(34, 211, 238, 0.18) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 100%, rgba(59, 130, 246, 0.20) 0%, transparent 55%),
+    linear-gradient(180deg, #081733 0%, var(--sky-blue) 55%, #050F24 100%);
+}
+
+/* ------------------------------------------------------------
+   WRAPPER
+   ------------------------------------------------------------ */
+.sky-wrap {
+  width: 100%;
+  max-width: 390px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ------------------------------------------------------------
+   BRAND
+   ------------------------------------------------------------ */
+.sky-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.sky-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(140deg, var(--sky-cyan) 0%, #3B82F6 100%);
+  box-shadow: 0 10px 24px -8px rgba(34, 211, 238, 0.65),
+              0 0 0 4px rgba(34, 211, 238, 0.10);
+}
+
+.sky-mark svg {
+  width: 48px;
+  height: 48px;
+  display: block;
+}
+
+.sky-brand-name {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.4px;
+  color: var(--sky-white);
+  text-shadow: 0 2px 12px rgba(34, 211, 238, 0.35);
+}
+
+/* ------------------------------------------------------------
+   REFERRAL CHIP (dynamic, hidden by default until ?ref= present)
+   ------------------------------------------------------------ */
+.sky-ref {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: var(--sky-r-pill);
+  background: rgba(34, 211, 238, 0.10);
+  border: 1px solid rgba(34, 211, 238, 0.30);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sky-soft);
+}
+
+.sky-ref[hidden] {
+  display: none;
+}
+
+.sky-ref-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sky-success);
+  box-shadow: 0 0 8px var(--sky-success);
+  flex-shrink: 0;
+}
+
+.sky-ref b {
+  color: var(--sky-white);
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.sky-ref i {
+  color: var(--sky-cyan);
+  font-size: 10px;
+}
+
+/* ------------------------------------------------------------
+   WELCOME
+   ------------------------------------------------------------ */
+.sky-welcome {
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--sky-muted);
+  line-height: 1.45;
+}
+
+.sky-welcome b {
+  color: var(--sky-soft);
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------
+   CARD
+   ------------------------------------------------------------ */
+.sky-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--sky-line);
+  border-radius: var(--sky-r);
+  padding: 16px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+}
+
+/* ------------------------------------------------------------
+   TABS — underline style
+   ------------------------------------------------------------ */
+.sky-tabs {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--sky-line);
+}
+
+.sky-tab {
+  flex: 1;
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--sky-font);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sky-muted);
+  position: relative;
+  transition: color 0.2s;
+}
+
+.sky-tab.active {
+  color: var(--sky-white);
+}
+
+.sky-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--sky-cyan), #3B82F6);
+  border-radius: 2px;
+}
+
+/* ------------------------------------------------------------
+   FORMS
+   ------------------------------------------------------------ */
+.sky-form {
+  display: none;
+}
+
+.sky-form.active {
+  display: block;
+  animation: sky-fade 0.25s ease;
+}
+
+@keyframes sky-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.sky-field {
+  margin-bottom: 11px;
+}
+
+.sky-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--sky-muted);
+  margin-bottom: 5px;
+}
+
+.sky-opt {
+  color: var(--sky-muted);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+
+.sky-input-wrap {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid var(--sky-line);
+  border-radius: var(--sky-r-sm);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.sky-input-wrap:focus-within {
+  border-color: var(--sky-cyan);
+  background: rgba(34, 211, 238, 0.06);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+}
+
+.sky-input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 12px;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: var(--sky-font);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--sky-white);
+}
+
+.sky-input::placeholder {
+  color: var(--sky-muted);
+}
+
+.sky-eye {
+  padding: 0 12px;
+  background: none;
+  border: none;
+  color: var(--sky-muted);
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.sky-eye:hover {
+  color: var(--sky-cyan);
+}
+
+/* ------------------------------------------------------------
+   SUBMIT
+   ------------------------------------------------------------ */
+.sky-submit {
+  width: 100%;
+  padding: 13px;
+  margin-top: 4px;
+  border: none;
+  border-radius: var(--sky-r-sm);
+  background: linear-gradient(120deg, var(--sky-cyan) 0%, #3B82F6 100%);
+  color: #04122B;
+  font-family: var(--sky-font);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 10px 24px -8px rgba(34, 211, 238, 0.6);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.sky-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 14px 30px -8px rgba(34, 211, 238, 0.8);
+}
+
+.sky-submit:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+}
+
+.sky-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------------
+   FOOT
+   ------------------------------------------------------------ */
+.sky-foot {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--sky-muted);
+  margin-top: 10px;
+}
+
+.sky-foot a {
+  color: var(--sky-cyan);
+  font-weight: 800;
+  text-decoration: none;
+  margin-left: 3px;
+}
+
+.sky-foot a:hover {
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------
+   COMMUNITY — icon logos with hyperlinks
+   ------------------------------------------------------------ */
+.sky-community {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sky-line);
+}
+
+.sky-community-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--sky-muted);
+}
+
+.sky-social-icons {
+  display: flex;
+  gap: 10px;
+}
+
+.sky-social-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--sky-line);
+  color: var(--sky-soft);
+  font-size: 16px;
+  text-decoration: none;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.18s;
+}
+
+.sky-social-icon:hover {
+  transform: translateY(-2px) scale(1.05);
+}
+
+.sky-social-icon.sky-wa:hover {
+  background: rgba(37, 211, 102, 0.15);
+  border-color: rgba(37, 211, 102, 0.55);
+  color: #25D366;
+}
+
+.sky-social-icon.sky-tg:hover {
+  background: rgba(34, 158, 217, 0.15);
+  border-color: rgba(34, 158, 217, 0.55);
+  color: #2AABEE;
+}
+
+/* ------------------------------------------------------------
+   LEGAL
+   ------------------------------------------------------------ */
+.sky-legal {
+  text-align: center;
+  font-size: 9.5px;
+  color: var(--sky-muted);
+  letter-spacing: 0.3px;
+}
+
+/* ------------------------------------------------------------
+   TOAST (used by auth.js)
+   ------------------------------------------------------------ */
+.pulse-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: var(--sky-r-sm);
+  padding: 14px 22px;
+  font-family: var(--sky-font);
+  font-size: 13px;
+  font-weight: 700;
+  color: #04122B;
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.35),
+              0 10px 24px -8px rgba(34, 211, 238, 0.3);
+  z-index: 9999;
+  opacity: 0;
+  max-width: 90vw;
+  text-align: center;
+  pointer-events: none;
+  animation: sky-toast-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  border-left: 4px solid var(--sky-cyan);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.pulse-toast.success { border-left-color: var(--sky-success); }
+.pulse-toast.error   { border-left-color: var(--sky-error); }
+.pulse-toast.warning { border-left-color: var(--sky-warn); }
+.pulse-toast.info    { border-left-color: var(--sky-info); }
+
+@keyframes sky-toast-up {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes sky-toast-down {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to   { opacity: 0; transform: translateX(-50%) translateY(20px); }
+}
+
+/* ------------------------------------------------------------
+   RESPONSIVE — bigger screens
+   ------------------------------------------------------------ */
+@media (min-width: 600px) {
+  .sky-wrap       { max-width: 440px; }
+  .sky-card       { padding: 22px 20px; }
+  .sky-brand-name { font-size: 22px; }
+  .sky-mark       { width: 54px; height: 54px; }
+}
+
+/* ------------------------------------------------------------
+   REDUCED MOTION
+   ------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

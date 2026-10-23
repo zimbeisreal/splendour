@@ -1,0 +1,64 @@
+"""
+Create all tables from SKYLINE models, working around circular FKs.
+
+Strategy:
+1. Import the app and db so all models are registered.
+2. Detach all FK constraints from CREATE TABLE, create every table
+   without FKs, then add the FKs via ALTER TABLE afterwards.
+   This avoids SQLAlchemy's CircularDependencyError on sort.
+"""
+from app import app, db
+from sqlalchemy import text
+from sqlalchemy.schema import CreateTable, AddConstraint, ForeignKeyConstraint
+from sqlalchemy.dialects import postgresql
+
+with app.app_context():
+    metadata = db.metadata
+    engine = db.engine
+    pg = postgresql.dialect()
+
+    # Collect all FKs so we can re-add them after CREATE
+    deferred_fks = []
+    for table in metadata.tables.values():
+        for fk in table.foreign_key_constraints:
+            deferred_fks.append((table, fk))
+
+    with engine.begin() as conn:
+        # 1. CREATE TABLE (no FKs)
+        for table in metadata.sorted_tables:
+            # Temporarily strip FKs
+            fks_backup = list(table.foreign_key_constraints)
+            for fk in fks_backup:
+                table.constraints.discard(fk)
+                for col in fk.columns:
+                    col.foreign_keys = set()
+
+            ddl = str(CreateTable(table).compile(dialect=pg))
+            print("CREATE:", table.name)
+            conn.execute(text(ddl))
+
+            # Restore FKs (in-memory only, for later ALTER)
+            for fk in fks_backup:
+                table.append_constraint(fk)
+
+        # 2. ALTER TABLE ... ADD CONSTRAINT for each deferred FK
+        for table, fk in deferred_fks:
+            if not fk.name:
+                # Give unnamed FKs a deterministic name
+                fk.name = f"fk_{table.name}_{'_'.join(c.name for c in fk.columns)}"
+
+            try:
+                add_ddl = str(AddConstraint(fk).compile(dialect=pg))
+                print("ALTER :", table.name, "->", fk.name)
+                conn.execute(text(add_ddl))
+            except Exception as e:
+                # Tolerate already-existing constraints
+                print(f"  [skip] {fk.name}: {e}")
+
+    # Final check
+    rows = db.session.execute(
+        text("select tablename from pg_tables where schemaname='public' order by tablename")
+    ).scalars().all()
+    print(f"\n✅ {len(rows)} tables now exist:")
+    for t in rows:
+        print("  -", t)

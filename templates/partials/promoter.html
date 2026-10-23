@@ -1,0 +1,490 @@
+<!-- ============================================================ -->
+<!-- PROMOTER REGISTRATION - express STYLED -->
+<!-- Mobile-First · Multi-Step · Professional -->
+<!-- ============================================================ -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>express - Promoter Registration</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/promoter.css">
+</head>
+<body>
+
+<div class="express-app">
+    
+    <!-- ============================================================ -->
+    <!-- HEADER -->
+    <!-- ============================================================ -->
+    <header class="express-header">
+        <a href="/" class="express-brand">
+            <div class="express-brand-icon">H</div>
+            <span class="express-brand-name">HUT<span>27</span></span>
+        </a>
+        <div class="express-header-info">
+            <span class="express-step-badge" id="stepBadge">Step 1 of 4</span>
+        </div>
+    </header>
+
+    <!-- ============================================================ -->
+    <!-- REGISTRATION FORM -->
+    <!-- ============================================================ -->
+    <section class="express-registration" id="registrationSection">
+        
+        <!-- Progress Bar -->
+        <div class="express-progress-container">
+            <div class="express-progress-steps">
+                <div class="express-progress-step active" data-step="1">
+                    <span class="express-progress-number">1</span>
+                    <span class="express-progress-label">Personal</span>
+                </div>
+                <div class="express-progress-step" data-step="2">
+                    <span class="express-progress-number">2</span>
+                    <span class="express-progress-label">Experience</span>
+                </div>
+                <div class="express-progress-step" data-step="3">
+                    <span class="express-progress-number">3</span>
+                    <span class="express-progress-label">Expectations</span>
+                </div>
+                <div class="express-progress-step" data-step="4">
+                    <span class="express-progress-number">4</span>
+                    <span class="express-progress-label">Review</span>
+                </div>
+            </div>
+            <div class="express-progress-bar">
+                <div class="express-progress-fill" id="progressFill" style="width: 25%;"></div>
+            </div>
+        </div>
+
+        <!-- Form -->
+        <form id="promoterForm" class="express-form">
+            
+            <!-- ============================================================ -->
+            <!-- STEP 1: PERSONAL INFORMATION -->
+            <!-- ============================================================ -->
+            <div class="express-form-step active" data-step="1">
+                <div class="express-step-header">
+                    <h2><i class="fas fa-user"></i> Personal Information</h2>
+                    <p>Tell us who you are. This helps us identify you.</p>
+                </div>
+
+                <div class="express-form-group">
+                    <label for="fullName">
+                        <i class="fas fa-user-circle"></i>
+                        Full Names <span class="required">*</span>
+                    </label>
+                    <input type="text" id="fullName" name="fullName" 
+                           placeholder="e.g., John Mukasa" 
+                           required autocomplete="name">
+                    <small>Enter your full names as they appear on your ID</small>
+                </div>
+
+                <div class="express-form-group">
+                    <label for="nin">
+                        <i class="fas fa-id-card"></i>
+                        National ID Number (NIN) <span class="required">*</span>
+                    </label>
+                    <input type="text" id="nin" name="nin" 
+                           placeholder="e.g., CM1234567890AB" 
+                           required maxlength="14" minlength="10">
+                    <small>Your NIN is required for verification purposes</small>
+                </div>
+
+                <div class="express-form-row">
+                    <div class="express-form-group half">
+                        <label for="phoneDirect">
+                            <i class="fas fa-phone"></i>
+                            Direct Call <span class="required">*</span>
+                        </label>
+                        <input type="tel" id="phoneDirect" name="phoneDirect" 
+                               placeholder="e.g., 256700000000" 
+                               required>
+                        <small>Phone number we can call you on</small>
+                    </div>
+                    <div class="express-form-group half">
+                        <label for="phoneWhatsapp">
+                            <i class="fab fa-whatsapp"></i>
+                            WhatsApp Number
+                        </label>
+                        <input type="tel" id="phoneWhatsapp" name="phoneWhatsapp" 
+                               placeholder="e.g., 256700000000">
+                        <small>For quick communication (optional)</small>
+                    </div>
+                </div>
+
+                <div class="express-form-group">
+                    <label for="email">
+                        <i class="fas fa-envelope"></i>
+                        Email Address
+                    </label>
+                    <input type="email" id="email" name="email" 
+                           placeholder="e.g., john@example.com">
+                    <small>For official communications (optional)</small>
+                </div>
+
+                <div class="express-form-group">
+                    <label for="location">
+                        <i class="fas fa-map-marker-alt"></i>
+                        Current Location / District <span class="required">*</span>
+                    </label>
+                    <input type="text" id="location" name="location" 
+                           placeholder="e.g., Kampala, Central Region" 
+                           required>
+                    <small>Where are you currently based?</small>
+                </div>
+
+                <button type="button" class="express-btn-next" onclick="goToStep(2)">
+                    Next <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- STEP 2: EXPERIENCE -->
+            <!-- ============================================================ -->
+            <div class="express-form-step" data-step="2">
+                <div class="express-step-header">
+                    <h2><i class="fas fa-briefcase"></i> Experience</h2>
+                    <p>Tell us about your marketing experience.</p>
+                </div>
+
+                <div class="express-form-group">
+                    <label>
+                        <i class="fas fa-history"></i>
+                        Previous Companies Marketed For
+                    </label>
+                    <textarea id="previousCompanies" name="previousCompanies" 
+                              rows="3" 
+                              placeholder="e.g., MTN Uganda, Jumia, Airtel, Safaricom..."></textarea>
+                    <small>List companies you've worked with as a promoter</small>
+                </div>
+
+                <div class="express-form-group">
+                    <label>
+                        <i class="fas fa-tasks"></i>
+                        What products/services have you promoted? <span class="required">*</span>
+                    </label>
+                    <textarea id="promotedProducts" name="promotedProducts" 
+                              rows="3" 
+                              placeholder="e.g., Mobile money, Insurance, Airtime, Banking..." 
+                              required></textarea>
+                    <small>Tell us about your experience</small>
+                </div>
+
+                <div class="express-form-row">
+                    <div class="express-form-group half">
+                        <label for="experienceMonths">
+                            <i class="fas fa-clock"></i>
+                            Experience (Months) <span class="required">*</span>
+                        </label>
+                        <select id="experienceMonths" name="experienceMonths" required>
+                            <option value="">Select...</option>
+                            <option value="0-3">0-3 months</option>
+                            <option value="3-6">3-6 months</option>
+                            <option value="6-12">6-12 months</option>
+                            <option value="12-24">1-2 years</option>
+                            <option value="24+">2+ years</option>
+                        </select>
+                        <small>How long have you been a promoter?</small>
+                    </div>
+                    <div class="express-form-group half">
+                        <label for="promoterType">
+                            <i class="fas fa-user-tag"></i>
+                            Promoter Type <span class="required">*</span>
+                        </label>
+                        <select id="promoterType" name="promoterType" required>
+                            <option value="">Select...</option>
+                            <option value="individual">Individual Promoter</option>
+                            <option value="group_leader">Group Leader</option>
+                            <option value="team_manager">Team Manager</option>
+                            <option value="agency">Agency/Company</option>
+                        </select>
+                        <small>What type of promoter are you?</small>
+                    </div>
+                </div>
+
+                <div class="express-form-group">
+                    <label for="teamSize">
+                        <i class="fas fa-users"></i>
+                        Team Size (if applicable)
+                    </label>
+                    <input type="number" id="teamSize" name="teamSize" 
+                           placeholder="e.g., 5, 10, 20" min="0">
+                    <small>How many people do you work with?</small>
+                </div>
+
+                <div class="express-form-actions">
+                    <button type="button" class="express-btn-prev" onclick="goToStep(1)">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                    <button type="button" class="express-btn-next" onclick="goToStep(3)">
+                        Next <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- STEP 3: EXPECTATIONS -->
+            <!-- ============================================================ -->
+            <div class="express-form-step" data-step="3">
+                <div class="express-step-header">
+                    <h2><i class="fas fa-star"></i> Your Expectations</h2>
+                    <p>Tell us what you're looking for.</p>
+                </div>
+
+                <div class="express-form-group">
+                    <label for="expectedDaily">
+                        <i class="fas fa-coins"></i>
+                        Expected Daily Earnings <span class="required">*</span>
+                    </label>
+                    <div class="express-input-with-suffix">
+                        <span class="express-input-suffix">UGX</span>
+                        <input type="number" id="expectedDaily" name="expectedDaily" 
+                               placeholder="e.g., 50000" required min="10000">
+                    </div>
+                    <small>Minimum UGX 10,000 per day</small>
+                </div>
+
+                <div class="express-form-group">
+                    <label for="expectedWeekly">
+                        <i class="fas fa-calendar-week"></i>
+                        Expected Weekly Earnings <span class="required">*</span>
+                    </label>
+                    <div class="express-input-with-suffix">
+                        <span class="express-input-suffix">UGX</span>
+                        <input type="number" id="expectedWeekly" name="expectedWeekly" 
+                               placeholder="e.g., 350000" required min="50000">
+                    </div>
+                    <small>Minimum UGX 50,000 per week</small>
+                </div>
+
+                <div class="express-form-group">
+                    <label for="availableHours">
+                        <i class="fas fa-clock"></i>
+                        Available Hours Per Day <span class="required">*</span>
+                    </label>
+                    <select id="availableHours" name="availableHours" required>
+                        <option value="">Select...</option>
+                        <option value="2-3">2-3 hours</option>
+                        <option value="4-5">4-5 hours</option>
+                        <option value="6-8">6-8 hours</option>
+                        <option value="8+">8+ hours</option>
+                    </select>
+                    <small>How many hours can you dedicate daily?</small>
+                </div>
+
+                <div class="express-form-group">
+                    <label for="preferredAreas">
+                        <i class="fas fa-map-pin"></i>
+                        Preferred Working Areas
+                    </label>
+                    <textarea id="preferredAreas" name="preferredAreas" 
+                              rows="2" 
+                              placeholder="e.g., Kampala, Nakawa, Makindye, Mukono..."></textarea>
+                    <small>Where would you like to work?</small>
+                </div>
+
+                <div class="express-form-group">
+                    <label for="skills">
+                        <i class="fas fa-star"></i>
+                        Skills & Strengths
+                    </label>
+                    <div class="express-skills-container">
+                        <div class="express-skill-tag" data-skill="communication">
+                            <i class="fas fa-comments"></i> Communication
+                        </div>
+                        <div class="express-skill-tag" data-skill="sales">
+                            <i class="fas fa-chart-line"></i> Sales
+                        </div>
+                        <div class="express-skill-tag" data-skill="social_media">
+                            <i class="fas fa-share-alt"></i> Social Media
+                        </div>
+                        <div class="express-skill-tag" data-skill="public_speaking">
+                            <i class="fas fa-microphone"></i> Public Speaking
+                        </div>
+                        <div class="express-skill-tag" data-skill="customer_service">
+                            <i class="fas fa-headset"></i> Customer Service
+                        </div>
+                        <div class="express-skill-tag" data-skill="leadership">
+                            <i class="fas fa-users-cog"></i> Leadership
+                        </div>
+                        <div class="express-skill-tag" data-skill="digital_marketing">
+                            <i class="fas fa-laptop"></i> Digital Marketing
+                        </div>
+                        <div class="express-skill-tag" data-skill="networking">
+                            <i class="fas fa-network-wired"></i> Networking
+                        </div>
+                    </div>
+                    <input type="hidden" id="selectedSkills" name="selectedSkills" value="[]">
+                    <small>Tap to select your skills (multiple allowed)</small>
+                </div>
+
+                <div class="express-form-actions">
+                    <button type="button" class="express-btn-prev" onclick="goToStep(2)">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                    <button type="button" class="express-btn-next" onclick="goToStep(4)">
+                        Review <i class="fas fa-check"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- STEP 4: REVIEW & SUBMIT -->
+            <!-- ============================================================ -->
+            <div class="express-form-step" data-step="4">
+                <div class="express-step-header">
+                    <h2><i class="fas fa-clipboard-check"></i> Review & Submit</h2>
+                    <p>Please review your details before submitting.</p>
+                </div>
+
+                <div class="express-review-card">
+                    <div class="express-review-section">
+                        <h4><i class="fas fa-user"></i> Personal Information</h4>
+                        <div class="express-review-row">
+                            <span class="express-review-label">Full Names:</span>
+                            <span class="express-review-value" id="reviewFullName">—</span>
+                        </div>
+                        <div class="express-review-row">
+                            <span class="express-review-label">NIN:</span>
+                            <span class="express-review-value" id="reviewNin">—</span>
+                        </div>
+                        <div class="express-review-row">
+                            <span class="express-review-label">Phone:</span>
+                            <span class="express-review-value" id="reviewPhone">—</span>
+                        </div>
+                        <div class="express-review-row">
+                            <span class="express-review-label">WhatsApp:</span>
+                            <span class="express-review-value" id="reviewWhatsapp">—</span>
+                        </div>
+                        <div class="express-review-row">
+                            <span class="express-review-label">Location:</span>
+                            <span class="express-review-value" id="reviewLocation">—</span>
+                        </div>
+                    </div>
+
+                    <div class="express-review-section">
+                        <h4><i class="fas fa-briefcase"></i> Experience</h4>
+                        <div class="express-review-row">
+                            <span class="express-review-label">Experience:</span>
+                            <span class="express-review-value" id="reviewExperience">—</span>
+                        </div>
+                        <div class="express-review-row">
+                            <span class="express-review-label">Promoter Type:</span>
+                            <span class="express-review-value" id="reviewPromoterType">—</span>
+                        </div>
+                        <div class="express-review-row">
+                            <span class="express-review-label">Team Size:</span>
+                            <span class="express-review-value" id="reviewTeamSize">—</span>
+                        </div>
+                    </div>
+
+                    <div class="express-review-section">
+                        <h4><i class="fas fa-star"></i> Expectations</h4>
+                        <div class="express-review-row">
+                            <span class="express-review-label">Daily Expected:</span>
+                            <span class="express-review-value" id="reviewDaily">—</span>
+                        </div>
+                        <div class="express-review-row">
+                            <span class="express-review-label">Weekly Expected:</span>
+                            <span class="express-review-value" id="reviewWeekly">—</span>
+                        </div>
+                        <div class="express-review-row">
+                            <span class="express-review-label">Available Hours:</span>
+                            <span class="express-review-value" id="reviewHours">—</span>
+                        </div>
+                        <div class="express-review-row">
+                            <span class="express-review-label">Skills:</span>
+                            <span class="express-review-value" id="reviewSkills">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="express-form-actions">
+                    <button type="button" class="express-btn-prev" onclick="goToStep(3)">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                    <button type="submit" class="express-btn-submit" id="submitBtn">
+                        <i class="fas fa-paper-plane"></i> Submit Registration
+                    </button>
+                </div>
+            </div>
+
+        </form>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- SUCCESS PAGE -->
+    <!-- ============================================================ -->
+    <section class="express-success" id="successSection" style="display:none;">
+        <div class="express-success-icon">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        
+        <h2>Registration Submitted Successfully! 🎉</h2>
+        <p class="express-success-message">
+            Your application has been received and is pending review.
+        </p>
+
+        <div class="express-success-card">
+            <div class="express-success-card-header">
+                <i class="fas fa-clock"></i>
+                <span>Pending Verification</span>
+            </div>
+            <div class="express-success-card-body">
+                <p>
+                    <i class="fas fa-user-check"></i>
+                    <strong>Wait for verification:</strong>
+                    Our team will review your application within 24-48 hours.
+                </p>
+                <p>
+                    <i class="fas fa-phone"></i>
+                    <strong>Contact Manager Simpson:</strong>
+                    For quick verification, contact <strong>Manager Simpson</strong> directly.
+                </p>
+                <div class="express-success-contact">
+                    <a href="tel:+256700000000" class="express-success-call-btn">
+                        <i class="fas fa-phone"></i> Call Manager Simpson
+                    </a>
+                    <a href="https://wa.me/256700000000" class="express-success-wa-btn" target="_blank">
+                        <i class="fab fa-whatsapp"></i> WhatsApp Manager
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="express-success-bonus">
+            <div class="express-success-bonus-icon">
+                <i class="fas fa-gift"></i>
+            </div>
+            <div class="express-success-bonus-info">
+                <h4>🎁 UGX 20,000 Welcome Bonus</h4>
+                <p>
+                    Upon verification, you will receive <strong>UGX 20,000</strong> 
+                    data/airtime bonus to get you started!
+                </p>
+                <small>
+                    <i class="fas fa-camera"></i> 
+                    Screenshot this page and send to Manager Simpson for quick follow-up.
+                </small>
+            </div>
+        </div>
+
+        <div class="express-success-actions">
+            <button class="express-btn-secondary" onclick="window.location.href='/'">
+                <i class="fas fa-home"></i> Back to Home
+            </button>
+            <button class="express-btn-primary" onclick="window.print()">
+                <i class="fas fa-print"></i> Print / Save
+            </button>
+        </div>
+    </section>
+
+</div>
+
+<script src="/static/js/promoter.js"></script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+/* ============================================================
+   SKYLINE · NEW-PROFILE — COMPATIBILITY LAYER
+   This file used to redefine the whole design system
+   (indigo + Arsenal red). It now provides:
+     1. Legacy alias tokens (already declared in
+        skyline-profile.css but kept here as a fallback).
+     2. A few legacy component shims used by older markup.
+   Do NOT redefine --sky-* here — those belong to
+   skyline-profile.css only.
+   ============================================================ */
+
+/* ============================================================
+   1. LEGACY ALIASES (fallback — no redefinition)
+   Any selector that still references --express-* or --h5-*
+   resolves through these aliases to Skyline tokens.
+   ============================================================ */
+:root {
+  /* express-* fallbacks — resolve via skyline-profile.css */
+  --express-bg:            transparent;
+  --express-surface:       rgba(255, 255, 255, 0.04);
+  --express-card:          rgba(255, 255, 255, 0.04);
+  --express-card-border:   rgba(255, 255, 255, 0.08);
+  --express-card-hover:    rgba(255, 255, 255, 0.06);
+  --express-white:         #FFFFFF;
+  --express-gold:          #22D3EE;
+  --express-gold-dark:     #06B6D4;
+  --express-gold-dim:      rgba(34, 211, 238, 0.14);
+  --express-gold-glow:     0 8px 20px -8px rgba(34, 211, 238, 0.6);
+  --express-green:         #22C55E;
+  --express-red:           #FF5A6E;
+  --express-red-dark:      #dc2626;
+  --express-grey:          rgba(255, 255, 255, 0.06);
+  --express-muted:         #6B85B5;
+  --express-radius:        16px;
+  --express-radius-sm:     11px;
+  --express-radius-pill:   999px;
+  --express-shadow:        0 8px 20px -8px rgba(0, 0, 0, 0.4);
+  --express-shadow-hover:  0 14px 34px -12px rgba(0, 0, 0, 0.55);
+  --express-font:          'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Layout tokens */
+  --content-max: 520px;
+  --tabbar-h:    70px;
+  --header-h:    58px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ease:        cubic-bezier(.2, .8, .2, 1);
+  --dur-1:       120ms;
+  --dur-2:       200ms;
+  --dur-3:       320ms;
+  --font:        'Inter', system-ui, -apple-system, sans-serif;
+  --mono:        'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* ============================================================
+   2. BASE SHIMS — only if the primary stylesheet has not
+   loaded yet (e.g. hot-reload during dev). These are safe
+   declarations that match Skyline tokens.
+   ============================================================ */
+html, body {
+  background: transparent;
+  color: var(--sky-white, #FFFFFF);
+  font-family: var(--font, 'Inter', system-ui, sans-serif);
+}
+
+/* ============================================================
+   3. GROUP MODAL SHIM — the buy-package flow uses a
+   non-express modal class that needs Skyline colors so it
+   doesn't fall back to browser defaults.
+   ============================================================ */
+.group-modal-overlay {
+  background: rgba(3, 8, 22, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.group-modal {
+  background: linear-gradient(180deg, var(--sky-blue-2, #0E2450), var(--sky-blue, #0A1A3C));
+  color: var(--sky-white, #FFFFFF);
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: 18px;
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.9);
+}
+.group-modal .express-modal-header,
+.group-modal .modal-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.group-modal .express-modal-close,
+.group-modal .modal-close {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #A9C1E8;
+}
+
+/* ============================================================
+   4. LEGACY TRANSPARENT-LIST SHIMS
+   Older markup sometimes wraps quick-rows in a container
+   that assumes a card. Neutralize that so the Skyline
+   per-row cards render correctly.
+   ============================================================ */
+.network-stats,
+.downline-container,
+.downline-list,
+.txn-container,
+.txn-list,
+.express-quick-list,
+.express-rewards-levels-list {
+  background: transparent;
+  box-shadow: none;
+  border: none;
+}
+
+/* ============================================================
+   5. LEGACY "hero" BANNER (old markup) — hide if present
+   The new Skyline profile uses .express-balance-card.total
+   as the hero. If an old .express-hero exists, keep it out
+   of the layout entirely.
+   ============================================================ */
+.express-hero,
+.express-hero-balances,
+.express-hero-actions,
+.express-hero-greeting,
+.express-hero-stats { display: none !important; }
+
+/* ============================================================
+   6. NO REDEFINITION OF SKY-* TOKENS
+   Do not redeclare --sky-* here. All Skyline tokens live in
+   skyline-profile.css (previously SKYLINE-profile.css) only.
+   This file is a fallback + shim layer.
+   ============================================================ */
+
+/* ============================================================
+   END
+   ============================================================ */

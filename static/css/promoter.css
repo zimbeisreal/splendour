@@ -1,0 +1,447 @@
+/* ============================================================
+   PROMOTER REGISTRATION - express STYLED
+   Mobile-First · Multi-Step · Professional
+   ============================================================ */
+
+/* ============================================================
+   BASE / RESET
+   ============================================================ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --express-bg: #0D0D0D;
+    --express-surface: #1A1A1A;
+    --express-card: #1E1E1E;
+    --express-card-border: #2A2A2A;
+    --express-card-hover: #2A2A2A;
+    --express-gold: #F5A623;
+    --express-gold-dark: #D4891A;
+    --express-gold-glow: rgba(245, 166, 35, 0.15);
+    --express-gold-dim: rgba(245, 166, 35, 0.08);
+    --express-white: #FFFFFF;
+    --express-grey: #C0C0C0;
+    --express-muted: #888888;
+    --express-green: #10B981;
+    --express-red: #E7242A;
+    --express-radius: 20px;
+    --express-radius-sm: 12px;
+    --express-radius-pill: 50px;
+    --express-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --express-shadow-hover: 0 12px 48px rgba(0, 0, 0, 0.6);
+    --express-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+    font-family: var(--express-font);
+    background: var(--express-bg);
+    color: var(--express-white);
+    min-height: 100vh;
+    padding: 12px;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+}
+
+.express-app {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 0 0 32px;
+    min-height: 100vh;
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.express-header {
+    background: var(--express-card);
+    border-radius: var(--express-radius);
+    padding: 14px 18px;
+    border: 1px solid var(--express-card-border);
+    box-shadow: var(--express-shadow);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.express-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+}
+
+.express-brand-icon {
+    width: 38px;
+    height: 38px;
+    background: var(--express-gold);
+    border-radius: var(--express-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 900;
+    color: var(--express-bg);
+    flex-shrink: 0;
+    box-shadow: 0 0 20px var(--express-gold-glow);
+}
+
+.express-brand-name {
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--express-white);
+    letter-spacing: -0.5px;
+}
+
+.express-brand-name span {
+    color: var(--express-gold);
+}
+
+.express-step-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 14px;
+    border-radius: var(--express-radius-pill);
+    background: var(--express-gold-dim);
+    color: var(--express-gold);
+    border: 1px solid rgba(245, 166, 35, 0.2);
+}
+
+/* ============================================================
+   PROGRESS BAR
+   ============================================================ */
+.express-progress-container {
+    margin-bottom: 20px;
+}
+
+.express-progress-steps {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    position: relative;
+}
+
+.express-progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+}
+
+.express-progress-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--express-card);
+    border: 2px solid var(--express-card-border);
+    color: var(--express-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    transition: all 0.4s ease;
+    z-index: 1;
+}
+
+.express-progress-step.active .express-progress-number {
+    background: var(--express-gold);
+    border-color: var(--express-gold);
+    color: var(--express-bg);
+    box-shadow: 0 0 20px var(--express-gold-glow);
+}
+
+.express-progress-step.completed .express-progress-number {
+    background: var(--express-green);
+    border-color: var(--express-green);
+    color: var(--express-bg);
+}
+
+.express-progress-label {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--express-muted);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: color 0.3s ease;
+}
+
+.express-progress-step.active .express-progress-label {
+    color: var(--express-gold);
+}
+
+.express-progress-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--express-card);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--express-card-border);
+}
+
+.express-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--express-gold), #F7C948);
+    border-radius: 10px;
+    transition: width 0.6s ease;
+}
+
+/* ============================================================
+   FORM
+   ============================================================ */
+.express-form {
+    background: var(--express-card);
+    border-radius: var(--express-radius);
+    padding: 20px 18px;
+    border: 1px solid var(--express-card-border);
+    box-shadow: var(--express-shadow);
+}
+
+.express-form-step {
+    display: none;
+    animation: fadeIn 0.4s ease;
+}
+
+.express-form-step.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Step Header */
+.express-step-header {
+    margin-bottom: 18px;
+}
+
+.express-step-header h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--express-white);
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.express-step-header h2 i {
+    color: var(--express-gold);
+}
+
+.express-step-header p {
+    font-size: 13px;
+    color: var(--express-muted);
+    margin-top: 4px;
+}
+
+/* Form Groups */
+.express-form-group {
+    margin-bottom: 16px;
+}
+
+.express-form-group label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--express-white);
+    display: block;
+    margin-bottom: 6px;
+}
+
+.express-form-group label .required {
+    color: var(--express-red);
+    margin-left: 2px;
+}
+
+.express-form-group label i {
+    color: var(--express-gold);
+    margin-right: 6px;
+    width: 16px;
+}
+
+.express-form-group input,
+.express-form-group select,
+.express-form-group textarea {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--express-bg);
+    border: 1px solid var(--express-card-border);
+    border-radius: var(--express-radius-sm);
+    color: var(--express-white);
+    font-size: 14px;
+    font-family: var(--express-font);
+    transition: all 0.3s ease;
+}
+
+.express-form-group input:focus,
+.express-form-group select:focus,
+.express-form-group textarea:focus {
+    outline: none;
+    border-color: var(--express-gold);
+    box-shadow: 0 0 0 3px var(--express-gold-glow);
+}
+
+.express-form-group input::placeholder,
+.express-form-group textarea::placeholder {
+    color: var(--express-muted);
+}
+
+.express-form-group select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888888' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+}
+
+.express-form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.express-form-group small {
+    display: block;
+    font-size: 11px;
+    color: var(--express-muted);
+    margin-top: 4px;
+}
+
+/* Form Row */
+.express-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.express-form-group.half {
+    margin-bottom: 0;
+}
+
+/* Input with suffix */
+.express-input-with-suffix {
+    position: relative;
+}
+
+.express-input-suffix {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--express-gold);
+}
+
+.express-input-with-suffix input {
+    padding-left: 50px;
+}
+
+/* Skills Tags */
+.express-skills-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.express-skill-tag {
+    padding: 6px 14px;
+    background: var(--express-bg);
+    border: 1px solid var(--express-card-border);
+    border-radius: var(--express-radius-pill);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--express-grey);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.express-skill-tag i {
+    font-size: 11px;
+}
+
+.express-skill-tag:hover {
+    border-color: var(--express-gold);
+    color: var(--express-white);
+}
+
+.express-skill-tag.selected {
+    background: var(--express-gold);
+    color: var(--express-bg);
+    border-color: var(--express-gold);
+}
+
+.express-skill-tag.selected i {
+    color: var(--express-bg);
+}
+
+/* Form Actions */
+.express-form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.express-btn-next,
+.express-btn-prev,
+.express-btn-submit {
+    padding: 12px 24px;
+    border: none;
+    border-radius: var(--express-radius-pill);
+    font-size: 14px;
+    font-weight: 700;
+    font-family: var(--express-font);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.express-btn-next {
+    background: var(--express-gold);
+    color: var(--express-bg);
+}
+
+.express-btn-next:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 24px var(--express-gold-glow);
+}
+
+.express-btn-prev {
+    background: var(--express-card-border);
+    color: var(--express-grey);
+}
+
+.express-btn-prev:hover {
+    background: var(--express-card-hover);
+    color: var(--express-white);
+}
+
+.express-btn-submit {
+    background: var(--express-gold);
+    color: var(--express-bg);
+    flex: 2;
+}
+
+.express-btn-submit:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 24px var(--express-gold-glow);
+}
+
+.express-btn-submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+

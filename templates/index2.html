@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
+    <title>express - Investment Machines</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}" />
+</head>
+<body>
+
+    <!-- ============================================================
+    MAIN CONTAINER
+    ============================================================ -->
+    <div class="express-app">
+
+        <!-- ===== HEADER ===== -->
+        <header class="express-header">
+            <div class="express-header-content">
+                <div class="express-brand">
+                    <span class="express-brand-icon">🏠</span>
+                    <span class="express-brand-name">HUT<span>27</span></span>
+                </div>
+                <div class="express-header-info">
+                    <span class="express-rate-badge">
+                        <i class="fas fa-percent"></i> 6% Daily
+                    </span>
+                    <span class="express-duration-badge">
+                        <i class="far fa-calendar-alt"></i> 26 Days
+                    </span>
+                </div>
+            </div>
+        </header>
+
+        <!-- ===== HERO ===== -->
+        <section class="express-hero">
+            <h1 class="express-hero-title">
+                Invest in <span>Machines</span>
+                <br />Earn Daily Returns
+            </h1>
+            <p class="express-hero-desc">
+                Choose your machine, lock for higher returns, and earn daily.
+                <br />No hidden fees. 100% transparent.
+            </p>
+            <div class="express-hero-stats">
+                <div class="express-hero-stat">
+                    <span class="express-hero-stat-number">10</span>
+                    <span class="express-hero-stat-label">Machines</span>
+                </div>
+                <div class="express-hero-stat">
+                    <span class="express-hero-stat-number">6%</span>
+                    <span class="express-hero-stat-label">Daily Rate</span>
+                </div>
+                <div class="express-hero-stat">
+                    <span class="express-hero-stat-number">26</span>
+                    <span class="express-hero-stat-label">Days Duration</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== COMPARISON LEGEND ===== -->
+        <div class="express-legend">
+            <div class="express-legend-item">
+                <span class="express-legend-dot standard"></span>
+                <span class="express-legend-label">Standard · No Lock</span>
+                <span class="express-legend-rate">6% Daily</span>
+            </div>
+            <div class="express-legend-item">
+                <span class="express-legend-dot locked"></span>
+                <span class="express-legend-label">Lock & Earn</span>
+                <span class="express-legend-rate">Up to 16% Daily</span>
+            </div>
+        </div>
+
+        <!-- ===== PRODUCTS GRID ===== -->
+        <section class="express-products" id="expressProducts">
+            <!-- Rendered by JavaScript -->
+        </section>
+
+        <!-- ===== FOOTER ===== -->
+        <footer class="express-footer">
+            <p class="express-footer-text">
+                © 2026 express · Built for Ugandans · Built for You
+            </p>
+            <p class="express-footer-disclaimer">
+                <i class="fas fa-shield-alt"></i> 100% Secure · Daily Returns · No Hidden Fees
+            </p>
+        </footer>
+
+    </div>
+
+    <!-- ============================================================
+    JAVASCRIPT
+    ============================================================ -->
+    <script src="{{ url_for('static', filename='js/profile.js') }}"></script>
+
+</body>
+</html>

@@ -1,0 +1,281 @@
+/* ============================================================
+   HUT 5 · VAULT — DESIGN TOKENS
+   PILLAR DASHBOARD · Green · Teal · Lime · Blue · Amber · Rose · Violet
+   Pairs with profile.css (Pillar layout).
+   Single clean file. Replaces all legacy token layers.
+   ============================================================ */
+
+:root {
+
+  /* ----------------------------------------------------------
+     CORE BRAND
+     ---------------------------------------------------------- */
+  --h5-green:       #00C853;
+  --h5-green-deep:  #009624;
+  --h5-green-dark:  #00701A;
+  --h5-green-soft:  #C8F7D8;
+  --h5-green-glow:  rgba(0, 200, 83, 0.35);
+
+  --h5-lime:        #B2FF59;
+  --h5-lime-soft:   #EAFFC7;
+  --h5-mint:        #69F0AE;
+  --h5-mint-soft:   #DFFBEC;
+  --h5-teal:        #00BFA5;
+  --h5-teal-soft:   #D6F5EF;
+
+  /* ----------------------------------------------------------
+     CATEGORY ACCENTS — one per Pillar tile
+     ---------------------------------------------------------- */
+  --h5-blue:        #1E88E5;
+  --h5-blue-soft:   #DDEBFB;
+
+  --h5-amber:       #F5A623;
+  --h5-amber-soft:  #FFF3D6;
+
+  --h5-rose:        #E23D4A;
+  --h5-rose-soft:   #FCE4E6;
+
+  --h5-violet:      #8B5CF6;
+  --h5-violet-soft: #EDE4FE;
+
+  /* ----------------------------------------------------------
+     CANVAS & SURFACES
+     ---------------------------------------------------------- */
+  --h5-bg:          #F0FBF3;
+  --h5-bg-2:        #E2F6E8;
+  --h5-surface:     #FFFFFF;
+  --h5-surface-2:   #F4FBF6;
+  --h5-surface-3:   #E8F5EC;
+  --h5-border:      #D2EBD9;
+  --h5-border-hi:   #A8D8B5;
+
+  /* ----------------------------------------------------------
+     TEXT
+     ---------------------------------------------------------- */
+  --h5-ink:         #0A2414;
+  --h5-ink-2:       #1E3A2A;
+  --h5-text:        #0F2A1A;
+  --h5-text-2:      #3D6B4D;
+  --h5-muted:       #7C9A88;
+  --h5-dim:         #B8CCBF;
+
+  /* ----------------------------------------------------------
+     STATUS
+     ---------------------------------------------------------- */
+  --h5-success:     var(--h5-green);
+  --h5-warning:     var(--h5-amber);
+  --h5-danger:      var(--h5-rose);
+  --h5-info:        var(--h5-blue);
+
+  /* ----------------------------------------------------------
+     RADII
+     ---------------------------------------------------------- */
+  --r-xs:   6px;
+  --r-sm:   10px;
+  --r-md:   14px;
+  --r-lg:   20px;
+  --r-xl:   28px;
+  --r-pill: 999px;
+
+  /* ----------------------------------------------------------
+     SHADOWS
+     ---------------------------------------------------------- */
+  --sh-1:   0 1px 2px rgba(10, 36, 20, 0.05),
+            0 1px 3px rgba(10, 36, 20, 0.04);
+  --sh-2:   0 4px 14px rgba(10, 36, 20, 0.06),
+            0 2px 6px rgba(10, 36, 20, 0.04);
+  --sh-3:   0 12px 32px rgba(10, 36, 20, 0.10);
+  --sh-fab: 0 12px 24px -6px rgba(0, 200, 83, 0.50),
+            0 6px 12px -4px rgba(0, 200, 83, 0.35);
+  --sh-sheet: 0 -20px 60px -12px rgba(10, 36, 20, 0.35);
+
+  /* ----------------------------------------------------------
+     SPACING (4-pt scale)
+     ---------------------------------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
+
+  /* ----------------------------------------------------------
+     MOTION
+     ---------------------------------------------------------- */
+  --ease:   cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-1:  120ms;
+  --dur-2:  200ms;
+  --dur-3:  320ms;
+
+  /* ----------------------------------------------------------
+     TYPE
+     ---------------------------------------------------------- */
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Courier New', monospace;
+
+  /* ----------------------------------------------------------
+     LAYOUT (Pillar Dashboard)
+     ---------------------------------------------------------- */
+  --content-max: 480px;
+  --tabbar-h:    70px;      /* capsule nav height */
+  --tabbar-inset: 12px;     /* distance from bottom safe area */
+  --header-h:    58px;      /* slim top bar */
+  --tile-gap:    10px;      /* gap between 2×2 tiles */
+  --tile-min-h:  96px;      /* minimum height of a Pillar tile */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* ----------------------------------------------------------
+     PILLAR PRIMITIVES — reusable numeric defaults
+     ---------------------------------------------------------- */
+  --radius-tile:  var(--r-md);
+  --radius-row:   var(--r-md);
+  --radius-pill:  var(--r-pill);
+  --radius-strip: var(--r-md);
+  --row-pad-y:    14px;
+  --row-pad-x:    16px;
+  --chip-h:       24px;
+
+  /* ============================================================
+     LEGACY ALIASES
+     Any CSS or JS that references the old token names keeps working.
+     ============================================================ */
+
+  /* Legacy express surfaces */
+  --express-bg:            var(--h5-bg);
+  --express-surface:       var(--h5-surface);
+  --express-card:          var(--h5-surface);
+  --express-card-border:   var(--h5-border);
+  --express-card-hover:    var(--h5-surface-2);
+  --express-white:         var(--h5-surface);
+  --express-grey:          var(--h5-surface-2);
+
+  /* Legacy express brand */
+  --express-gold:          var(--h5-green);
+  --express-gold-dark:     var(--h5-green-deep);
+  --express-gold-dim:      var(--h5-green-soft);
+  --express-gold-glow:     var(--h5-green-glow);
+  --express-green:         var(--h5-green);
+  --express-red:           var(--h5-rose);
+  --express-red-dark:      #C62834;
+  --express-muted:         var(--h5-muted);
+
+  /* Legacy geometry */
+  --express-radius:        var(--r-lg);
+  --express-radius-sm:     var(--r-md);
+  --express-radius-pill:   var(--r-pill);
+  --express-shadow:        var(--sh-1);
+  --express-shadow-hover:  var(--sh-2);
+  --express-font:          var(--font);
+
+  /* Legacy generic token names */
+  --bg:             var(--h5-bg);
+  --surface:        var(--h5-surface);
+  --surface-2:      var(--h5-surface-2);
+  --surface-3:      var(--h5-surface-3);
+  --border:         var(--h5-border);
+  --border-strong:  var(--h5-border-hi);
+
+  --primary:        var(--h5-green);
+  --primary-hover:  var(--h5-green-deep);
+  --primary-soft:   var(--h5-green-soft);
+  --primary-text:   #FFFFFF;
+
+  --accent-deposit:  var(--h5-green);
+  --accent-withdraw: var(--h5-blue);
+  --accent-lock:     var(--h5-amber);
+  --accent-team:     var(--h5-teal);
+  --accent-reward:   var(--h5-violet);
+  --accent-danger:   var(--h5-rose);
+
+  --accent-deposit-soft:  var(--h5-mint-soft);
+  --accent-withdraw-soft: var(--h5-blue-soft);
+  --accent-lock-soft:     var(--h5-amber-soft);
+  --accent-team-soft:     var(--h5-teal-soft);
+  --accent-reward-soft:   var(--h5-violet-soft);
+  --accent-danger-soft:   var(--h5-rose-soft);
+
+  --text:           var(--h5-text);
+  --text-2:         var(--h5-text-2);
+  --text-muted:     var(--h5-muted);
+  --text-invert:    #FFFFFF;
+
+  --success:        var(--h5-success);
+  --warning:        var(--h5-warning);
+  --danger:         var(--h5-danger);
+  --info:           var(--h5-info);
+
+  --shadow-1:       var(--sh-1);
+  --shadow-2:       var(--sh-2);
+  --shadow-3:       var(--sh-3);
+  --shadow-glow:    0 0 0 3px var(--h5-green-glow);
+
+  --r-pill-legacy:  var(--r-pill);
+}
+
+/* ============================================================
+   BASE RESET
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--h5-bg);
+  color: var(--h5-text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+img, svg { display: block; max-width: 100%; }
+
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+a { color: var(--h5-green-deep); text-decoration: none; }
+a:hover { color: var(--h5-green-dark); }
+
+::selection {
+  background: var(--h5-mint-soft);
+  color: var(--h5-green-dark);
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb {
+  background: var(--h5-border-hi);
+  border-radius: var(--r-pill);
+}
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ============================================================
+   UTILITY PRIMITIVES
+   ============================================================ */
+.h5-mono  { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.h5-ink   { color: var(--h5-ink); }
+.h5-muted { color: var(--h5-muted); }
+.h5-green { color: var(--h5-green); }
+.h5-grid  { display: grid; gap: var(--sp-3); }
+
+/* ============================================================
+   MOTION SAFETY
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================
+   END
+   ============================================================ */

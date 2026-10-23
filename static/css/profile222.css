@@ -1,0 +1,1204 @@
+/* ============================================================
+   express - REDESIGNED PRODUCT PRESENTATION
+   Mobile-First · Spacious · Progressive Disclosure
+   ============================================================ */
+
+/* ============================================================
+   PRODUCTS CONTAINER
+   ============================================================ */
+.express-products {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px 16px 40px;
+}
+
+/* ============================================================
+   SECTION 1: INTRODUCTION
+   ============================================================ */
+.express-products-intro {
+    background: var(--express-card);
+    border-radius: var(--express-radius);
+    padding: 24px 20px;
+    border: 1px solid var(--express-card-border);
+    box-shadow: var(--express-shadow);
+    margin-bottom: 24px;
+}
+
+.express-intro-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--express-white);
+    margin: 0 0 8px 0;
+    letter-spacing: -0.3px;
+}
+
+.express-intro-desc {
+    font-size: 14px;
+    color: var(--express-grey);
+    line-height: 1.5;
+    margin: 0 0 20px 0;
+}
+
+/* Intro Tabs */
+.express-intro-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.express-intro-tab {
+    padding: 14px 12px;
+    background: var(--express-bg);
+    border: 2px solid var(--express-card-border);
+    border-radius: var(--express-radius-sm);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+    font-family: var(--express-font);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.express-intro-tab:hover {
+    border-color: var(--express-gold-dim);
+}
+
+.express-intro-tab.active {
+    border-color: var(--express-gold);
+    background: rgba(245, 166, 35, 0.06);
+}
+
+.express-intro-tab .tab-icon {
+    font-size: 20px;
+}
+
+.express-intro-tab .tab-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--express-white);
+}
+
+.express-intro-tab .tab-sub {
+    font-size: 11px;
+    color: var(--express-muted);
+}
+
+.express-intro-tab.active .tab-sub {
+    color: var(--express-gold);
+}
+
+/* Intro Info */
+.express-intro-info {
+    background: var(--express-bg);
+    border-radius: var(--express-radius-sm);
+    padding: 16px;
+    border: 1px solid var(--express-card-border);
+}
+
+.intro-method {
+    display: block;
+}
+
+.intro-method h4 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--express-white);
+    margin: 0 0 6px 0;
+}
+
+.intro-method p {
+    font-size: 13px;
+    color: var(--express-grey);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.intro-method p strong {
+    color: var(--express-gold);
+}
+
+.intro-method.locking-inactive {
+    display: none;
+}
+
+/* ============================================================
+   SECTION 2: DAILY WITHDRAWAL MACHINES
+   ============================================================ */
+.express-daily-section {
+    margin-bottom: 32px;
+    scroll-margin-top: 20px;
+}
+
+.express-section-header {
+    margin-bottom: 20px;
+}
+
+.express-section-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--express-white);
+    margin: 0 0 8px 0;
+    letter-spacing: -0.3px;
+}
+
+.express-section-desc {
+    font-size: 14px;
+    color: var(--express-grey);
+    line-height: 1.5;
+    margin: 0 0 12px 0;
+}
+
+.express-section-desc strong {
+    color: var(--express-gold);
+}
+
+.express-section-features {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 16px;
+}
+
+.express-section-features li {
+    font-size: 13px;
+    color: var(--express-grey);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.express-section-features li::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    background: var(--express-gold);
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ============================================================
+   DAILY CARD - Spacious Vertical Layout
+   ============================================================ */
+.express-daily-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.express-daily-card {
+    background: var(--express-card);
+    border-radius: var(--express-radius);
+    padding: 20px;
+    border: 1px solid var(--express-card-border);
+    box-shadow: var(--express-shadow);
+    transition: all 0.3s ease;
+}
+
+.express-daily-card:hover {
+    border-color: var(--express-gold-dim);
+}
+
+.express-daily-card.purchased {
+    border-color: var(--express-green);
+}
+
+.express-daily-card.sold {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Daily Header */
+.express-daily-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.daily-emoji {
+    font-size: 32px;
+    line-height: 1;
+}
+
+.daily-name-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.daily-name {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--express-white);
+}
+
+.daily-level {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-block;
+    width: fit-content;
+}
+
+.daily-level.basic {
+    background: #4CAF50;
+    color: #fff;
+}
+
+.daily-level.standard {
+    background: #2196F3;
+    color: #fff;
+}
+
+.daily-level.premium {
+    background: #9C27B0;
+    color: #fff;
+}
+
+.daily-level.vip {
+    background: #FF6F00;
+    color: #fff;
+}
+
+.daily-level.elite {
+    background: #D32F2F;
+    color: #fff;
+}
+
+.daily-level.diamond {
+    background: linear-gradient(135deg, #FFD700, #FFA500);
+    color: #000;
+}
+
+/* Daily Investment */
+.express-daily-investment {
+    background: var(--express-bg);
+    border-radius: var(--express-radius-sm);
+    padding: 14px 16px;
+    border: 1px solid var(--express-card-border);
+    margin-bottom: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.investment-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--express-grey);
+}
+
+.investment-amount {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--express-gold);
+}
+
+/* Daily Earnings (Primary Focus) */
+.express-daily-earnings {
+    background: rgba(245, 166, 35, 0.06);
+    border-radius: var(--express-radius-sm);
+    padding: 16px;
+    border: 2px solid rgba(245, 166, 35, 0.12);
+    margin-bottom: 14px;
+    text-align: center;
+}
+
+.earnings-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--express-grey);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.earnings-amount {
+    display: block;
+    font-size: 28px;
+    font-weight: 900;
+    color: var(--express-gold);
+    margin-bottom: 4px;
+}
+
+.earnings-rate {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--express-white);
+    background: rgba(245, 166, 35, 0.12);
+    padding: 2px 16px;
+    border-radius: 20px;
+}
+
+/* Daily Meta */
+.express-daily-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.meta-item {
+    background: var(--express-bg);
+    border-radius: var(--express-radius-sm);
+    padding: 10px 12px;
+    border: 1px solid var(--express-card-border);
+    text-align: center;
+}
+
+.meta-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--express-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.meta-value {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--express-white);
+    margin-top: 2px;
+}
+
+.meta-value.gold {
+    color: var(--express-gold);
+}
+
+/* How It Works */
+.express-daily-howto {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: rgba(16, 185, 129, 0.04);
+    border-radius: var(--express-radius-sm);
+    padding: 12px 14px;
+    border: 1px solid rgba(16, 185, 129, 0.08);
+    margin-bottom: 14px;
+}
+
+.howto-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.howto-text {
+    font-size: 13px;
+    color: var(--express-grey);
+    line-height: 1.5;
+}
+
+.howto-text strong {
+    color: var(--express-gold);
+}
+
+/* Toggle Button */
+.express-daily-toggle {
+    width: 100%;
+    padding: 10px;
+    background: transparent;
+    border: 1px solid var(--express-card-border);
+    border-radius: var(--express-radius-sm);
+    color: var(--express-grey);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: var(--express-font);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.express-daily-toggle:hover {
+    border-color: var(--express-gold);
+    color: var(--express-gold);
+}
+
+.express-daily-toggle i {
+    font-size: 12px;
+    transition: transform 0.3s ease;
+}
+
+/* Expanded Details */
+.express-daily-details {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, opacity 0.3s ease, margin 0.3s ease;
+    opacity: 0;
+    margin-bottom: 0;
+}
+
+.express-daily-details.expanded {
+    max-height: 600px;
+    opacity: 1;
+    margin-bottom: 14px;
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    background: var(--express-bg);
+    border-radius: var(--express-radius-sm);
+    padding: 14px;
+    border: 1px solid var(--express-card-border);
+}
+
+.detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.detail-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--express-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.detail-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--express-white);
+}
+
+.detail-value.gold {
+    color: var(--express-gold);
+}
+
+.detail-value.green {
+    color: var(--express-green);
+}
+
+/* Daily Actions */
+.express-daily-actions {
+    margin-top: 4px;
+}
+
+.express-daily-actions .express-product-buy-btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: var(--express-radius-sm);
+    font-size: 15px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #FFD700, #F57C00);
+    color: #000;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: var(--express-font);
+}
+
+.express-daily-actions .express-product-buy-btn:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 20px rgba(245, 166, 35, 0.3);
+}
+
+.express-daily-actions .express-product-details-btn {
+    width: 100%;
+    padding: 14px;
+    border: 1px solid var(--express-card-border);
+    border-radius: var(--express-radius-sm);
+    font-size: 15px;
+    font-weight: 700;
+    background: transparent;
+    color: var(--express-white);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: var(--express-font);
+}
+
+.express-daily-actions .express-product-details-btn:hover {
+    border-color: var(--express-gold);
+    color: var(--express-gold);
+}
+
+.express-daily-actions .express-sold-badge {
+    display: block;
+    text-align: center;
+    padding: 14px;
+    background: var(--express-bg);
+    border-radius: var(--express-radius-sm);
+    color: var(--express-muted);
+    font-weight: 600;
+}
+
+/* ============================================================
+   SECTION 3: LOCKING MACHINES
+   ============================================================ */
+.express-locking-section {
+    margin-bottom: 32px;
+    scroll-margin-top: 20px;
+}
+
+.express-section-header.locking {
+    margin-bottom: 20px;
+}
+
+.express-section-desc-small {
+    font-size: 13px;
+    color: var(--express-grey);
+    margin: 8px 0 16px 0;
+}
+
+/* Locking Process Flow */
+.express-locking-process {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 4px;
+    background: var(--express-bg);
+    border-radius: var(--express-radius-sm);
+    padding: 12px 14px;
+    border: 1px solid var(--express-card-border);
+}
+
+.process-step {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--express-grey);
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+}
+
+.process-arrow {
+    color: var(--express-gold);
+    font-weight: 700;
+}
+
+/* ============================================================
+   LOCKING RATE GUIDE
+   ============================================================ */
+.express-locking-rate-guide {
+    background: var(--express-card);
+    border-radius: var(--express-radius);
+    padding: 20px;
+    border: 1px solid var(--express-card-border);
+    margin-bottom: 20px;
+    box-shadow: var(--express-shadow);
+}
+
+.guide-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--express-white);
+    margin: 0 0 14px 0;
+    text-align: center;
+}
+
+.guide-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.guide-item {
+    background: var(--express-bg);
+    border-radius: var(--express-radius-sm);
+    padding: 14px 12px;
+    border: 1px solid var(--express-card-border);
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.guide-item:hover {
+    border-color: var(--express-gold-dim);
+}
+
+.guide-duration {
+    display: block;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--express-white);
+}
+
+.guide-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--express-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 2px 0 4px 0;
+}
+
+.guide-rate {
+    display: inline-block;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--express-gold);
+    background: rgba(245, 166, 35, 0.08);
+    padding: 2px 14px;
+    border-radius: 20px;
+}
+
+/* ============================================================
+   LOCKING CARD
+   ============================================================ */
+.express-locking-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.express-locking-card {
+    background: var(--express-card);
+    border-radius: var(--express-radius);
+    padding: 20px;
+    border: 1px solid var(--express-card-border);
+    box-shadow: var(--express-shadow);
+    transition: all 0.3s ease;
+}
+
+.express-locking-card:hover {
+    border-color: var(--express-gold-dim);
+}
+
+.express-locking-card.purchased {
+    border-color: var(--express-green);
+}
+
+.express-locking-card.sold {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Locking Header */
+.express-locking-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.locking-emoji {
+    font-size: 32px;
+    line-height: 1;
+}
+
+.locking-name-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.locking-name {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--express-white);
+}
+
+.locking-level {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-block;
+    width: fit-content;
+}
+
+.locking-level.basic {
+    background: #4CAF50;
+    color: #fff;
+}
+
+.locking-level.standard {
+    background: #2196F3;
+    color: #fff;
+}
+
+.locking-level.premium {
+    background: #9C27B0;
+    color: #fff;
+}
+
+.locking-level.vip {
+    background: #FF6F00;
+    color: #fff;
+}
+
+.locking-level.elite {
+    background: #D32F2F;
+    color: #fff;
+}
+
+.locking-level.diamond {
+    background: linear-gradient(135deg, #FFD700, #FFA500);
+    color: #000;
+}
+
+/* Locking Investment */
+.express-locking-investment {
+    background: var(--express-bg);
+    border-radius: var(--express-radius-sm);
+    padding: 14px 16px;
+    border: 1px solid var(--express-card-border);
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.express-locking-investment .investment-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--express-grey);
+}
+
+.express-locking-investment .investment-amount {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--express-gold);
+}
+
+/* Locking Options */
+.express-locking-options {
+    margin-bottom: 16px;
+}
+
+.options-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--express-white);
+    margin-bottom: 2px;
+}
+
+.options-desc {
+    font-size: 13px;
+    color: var(--express-grey);
+    margin: 0 0 12px 0;
+}
+
+.options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.lock-option {
+    padding: 12px 10px;
+    background: var(--express-bg);
+    border: 2px solid var(--express-card-border);
+    border-radius: var(--express-radius-sm);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+    font-family: var(--express-font);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.lock-option:hover {
+    border-color: var(--express-gold-dim);
+}
+
+.lock-option.selected {
+    border-color: var(--express-gold);
+    background: rgba(245, 166, 35, 0.06);
+    box-shadow: 0 0 24px rgba(245, 166, 35, 0.08);
+}
+
+.lock-days {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--express-white);
+}
+
+.lock-rate {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--express-gold);
+}
+
+.lock-earnings {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--express-grey);
+}
+
+.lock-selected {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--express-green);
+    margin-top: 2px;
+}
+
+/* Selected Locking Details */
+.express-locking-selected {
+    background: var(--express-bg);
+    border-radius: var(--express-radius-sm);
+    padding: 16px;
+    border: 2px solid var(--express-gold);
+    margin-bottom: 16px;
+    animation: fadeInUp 0.3s ease;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.selected-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--express-card-border);
+}
+
+.selected-badge {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--express-green);
+}
+
+.selected-duration {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--express-white);
+}
+
+.selected-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.selected-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 6px;
+}
+
+.selected-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--express-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.selected-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--express-white);
+}
+
+.selected-value.rate {
+    color: var(--express-gold);
+}
+
+.selected-value.earnings {
+    color: var(--express-gold);
+    font-size: 16px;
+}
+
+.selected-value.total {
+    color: var(--express-gold);
+}
+
+.selected-value.profit {
+    color: var(--express-green);
+}
+
+/* Locking Actions */
+.express-locking-actions {
+    margin-top: 4px;
+}
+
+.express-locking-actions .express-product-buy-btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: var(--express-radius-sm);
+    font-size: 15px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #E7242A, #C41A1F);
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: var(--express-font);
+}
+
+.express-locking-actions .express-product-buy-btn:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 20px rgba(231, 36, 42, 0.3);
+}
+
+.express-locking-actions .express-product-buy-btn.locking {
+    background: linear-gradient(135deg, #E7242A, #C41A1F);
+}
+
+.express-locking-actions .express-locking-select-hint {
+    width: 100%;
+    padding: 14px;
+    border: 1px solid var(--express-card-border);
+    border-radius: var(--express-radius-sm);
+    background: var(--express-bg);
+    color: var(--express-muted);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: default;
+    font-family: var(--express-font);
+    text-align: center;
+}
+
+.express-locking-actions .express-product-details-btn {
+    width: 100%;
+    padding: 14px;
+    border: 1px solid var(--express-card-border);
+    border-radius: var(--express-radius-sm);
+    font-size: 15px;
+    font-weight: 700;
+    background: transparent;
+    color: var(--express-white);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: var(--express-font);
+}
+
+.express-locking-actions .express-product-details-btn:hover {
+    border-color: var(--express-gold);
+    color: var(--express-gold);
+}
+
+.express-locking-actions .express-sold-badge {
+    display: block;
+    text-align: center;
+    padding: 14px;
+    background: var(--express-bg);
+    border-radius: var(--express-radius-sm);
+    color: var(--express-muted);
+    font-weight: 600;
+}
+
+/* ============================================================
+   RESPONSIVE - Tablet & Desktop
+   ============================================================ */
+@media (min-width: 640px) {
+    .express-products {
+        max-width: 600px;
+        padding: 20px 24px 48px;
+    }
+
+    .guide-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .options-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .selected-details {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .details-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (min-width: 768px) {
+    .express-products {
+        max-width: 720px;
+        padding: 24px 32px 56px;
+    }
+
+    .express-daily-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 18px;
+    }
+
+    .express-locking-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 18px;
+    }
+
+    .express-intro-tabs {
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+@media (min-width: 1024px) {
+    .express-products {
+        max-width: 960px;
+        padding: 32px 40px 64px;
+    }
+
+    .express-daily-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+    }
+
+    .express-locking-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+    }
+
+    .guide-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .express-daily-card:hover,
+    .express-locking-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--express-shadow-hover);
+    }
+}
+
+/* ============================================================
+   RESPONSIVE - Extra Small (≤ 380px)
+   ============================================================ */
+@media (max-width: 380px) {
+    .express-products {
+        padding: 12px 12px 32px;
+    }
+
+    .express-products-intro {
+        padding: 18px 14px;
+    }
+
+    .express-intro-title {
+        font-size: 18px;
+    }
+
+    .express-daily-card,
+    .express-locking-card {
+        padding: 16px;
+    }
+
+    .daily-emoji,
+    .locking-emoji {
+        font-size: 26px;
+    }
+
+    .daily-name,
+    .locking-name {
+        font-size: 17px;
+    }
+
+    .earnings-amount {
+        font-size: 24px;
+    }
+
+    .investment-amount {
+        font-size: 16px;
+    }
+
+    .options-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+    }
+
+    .guide-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .lock-option {
+        padding: 10px 8px;
+    }
+
+    .lock-days {
+        font-size: 13px;
+    }
+
+    .lock-rate {
+        font-size: 11px;
+    }
+
+    .lock-earnings {
+        font-size: 10px;
+    }
+
+    .selected-details {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .details-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .express-section-features {
+        grid-template-columns: 1fr;
+    }
+
+    .express-locking-process {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .process-step {
+        font-size: 10px;
+    }
+
+    .express-intro-tab {
+        padding: 10px 8px;
+    }
+
+    .express-intro-tab .tab-label {
+        font-size: 11px;
+    }
+
+    .express-intro-tab .tab-sub {
+        font-size: 9px;
+    }
+}
+
+/* ============================================================
+   ACCESSIBILITY - Reduced Motion
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ============================================================
+   DARK MODE - Already using dark theme
+   ============================================================ */

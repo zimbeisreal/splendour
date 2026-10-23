@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
+    <title>express · Promoter Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <style>
+        /* ============================================================
+           express - PROMOTER DASHBOARD
+           Performance Tracking & Payments
+           ============================================================ */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --express-bg: #0D0D0D;
+            --express-surface: #1A1A1A;
+            --express-card: #1E1E1E;
+            --express-card-border: #2A2A2A;
+            --express-gold: #F5A623;
+            --express-gold-dark: #D4891A;
+            --express-white: #FFFFFF;
+            --express-grey: #B0B0B0;
+            --express-muted: #6B6B6B;
+            --express-green: #10B981;
+            --express-red: #E7242A;
+            --express-blue: #3B82F6;
+            --express-purple: #8B5CF6;
+            --express-radius: 20px;
+            --express-radius-sm: 12px;
+            --express-radius-pill: 50px;
+            --express-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            --express-font: 'Inter', -apple-system, sans-serif;
+        }
+
+        body {
+            font-family: var(--express-font);
+            background: var(--express-bg);
+            color: var(--express-white);
+            min-height: 100vh;
+            padding: 16px;
+        }
+
+        .express-app {
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        /* ============================================================
+           HEADER
+           ============================================================ */
+        .express-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0 16px;
+            border-bottom: 1px solid var(--express-card-border);
+            margin-bottom: 16px;
+        }
+
+        .express-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .express-brand-icon {
+            width: 36px;
+            height: 36px;
+            background: var(--express-gold);
+            border-radius: var(--express-radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 900;
+            color: var(--express-bg);
+        }
+
+        .express-brand-name {
+            font-size: 18px;
+            font-weight: 900;
+            color: var(--express-white);
+        }
+
+        .express-brand-name span {
+            color: var(--express-gold);
+        }
+
+        .express-brand-badge {
+            font-size: 8px;
+            font-weight: 700;
+            padding: 1px 10px;
+            border-radius: var(--express-radius-pill);
+            background: rgba(245, 166, 35, 0.12);
+            color: var(--express-gold);
+            border: 1px solid rgba(245, 166, 35, 0.15);
+        }
+
+        .express-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .express-header-btn {
+            width: 36px;
+            height: 36px;
+            border: 1px solid var(--express-card-border);
+            border-radius: 50%;
+            background: transparent;
+            color: var(--express-grey);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .express-header-btn:hover {
+            border-color: var(--express-gold);
+            color: var(--express-gold);
+        }
+
+        .express-header-btn .badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            width: 18px;
+            height: 18px;
+            background: var(--express-red);
+            border-radius: 50%;
+            font-size: 9px;
+            font-weight: 800;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .express-profile-mini {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            padding: 4px 8px 4px 4px;
+            border-radius: var(--express-radius-pill);
+            border: 1px solid var(--express-card-border);
+            transition: all 0.3s ease;
+        }
+
+        .express-profile-mini:hover {
+            border-color: var(--express-gold);
+        }
+
+        .express-profile-mini .avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--express-gold);
+            color: var(--express-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .express-profile-mini i {
+            color: var(--express-muted);
+            font-size: 12px;
+        }
+
+        /* ============================================================
+           GREETING
+           ============================================================ */
+        .express-greeting {
+            margin-bottom: 16px;
+        }
+
+        .express-greeting h1 {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--express-white);
+        }
+
+        .express-greeting h1 span {
+            color: var(--express-gold);
+        }
+
+        .express-greeting-sub {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            flex-wrap: wrap;
+        }
+
+        .express-role-badge {
+            background: rgba(245, 166, 35, 0.12);
+            color: var(--express-gold);
+            padding: 2px 14px;
+            border-radius: var(--express-radius-pill);
+            font-weight: 600;
+            font-size: 11px;
+            border: 1px solid rgba(245, 166, 35, 0.15);
+        }
+
+        .express-location-badge {
+            color: var(--express-grey);
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .express-location-badge i {
+            color: var(--express-gold);
+        }
+
+        .express-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 14px;
+            border-radius: var(--express-radius-pill);
+            background: rgba(245, 166, 35, 0.08);
+            border: 1px solid rgba(245, 166, 35, 0.12);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--express-grey);
+        }
+
+        .express-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .express-status-dot.pending {
+            background: var(--express-gold);
+            animation: expressPulse 2s infinite;
+        }
+
+        .express-status-dot.active {
+            background: var(--express-green);
+        }
+
+        @keyframes expressPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        /* ============================================================
+           EARNINGS OVERVIEW
+           ============================================================ */
+        .express-earnings {
+            background: var(--express-card);
+            border-radius: var(--express-radius);
+            padding: 16px;
+            border: 1px solid var(--express-card-border);
+            margin-bottom: 16px;
+        }
+
+        .express-earnings-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .express-earnings-item {
+            text-align: center;
+            padding: 6px 4px;
+            background: var(--express-bg);
+            border-radius: var(--express-radius-sm);
+        }
+
+        .express-earnings-number {
+            display: block;
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--express-white);
+        }
+
+        .express-earnings-label {
+            font-size: 9px;
+            color: var(--express-grey);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            font-weight: 600;
+        }
+
+        /* ============================================================
+           PERFORMANCE PROGRESS
+           ============================================================ */
+        .express-progress {
+            background: var(--express-card);
+            border-radius: var(--express-radius);
+            padding: 16px;
+            border: 1px solid var(--express-card-border);
+            margin-bottom: 16px;
+        }
+
+        .express-progress-item {
+            margin-bottom: 12px;
+        }
+
+        .express-progress-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .express-progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3px;
+        }
+
+        .express-progress-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--express-grey);
+        }
+
+        .express-progress-amount {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--express-gold);
+        }
+
+        .express-progress-percent {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--express-white);
+        }
+
+        .express-progress-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--express-bg);
+            border-radius: var(--express-radius-pill);
+            overflow: hidden;
+        }
+
+        .express-progress-fill {
+            height: 100%;
+            background: var(--express-gold);
+            border-radius: var(--express-radius-pill);
+            transition: width 0.8s ease;
+        }
+
+        .express-rank {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--express-card-border);
+        }
+
+        .express-rank-icon {
+            font-size: 24px;
+        }
+
+        .express-rank-info {
+            flex: 1;
+        }
+
+        .express-rank-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--express-white);
+        }
+
+        .express-rank-next {
+            font-size: 11px;
+            color: var(--express-grey);
+        }
+
+        .express-rank-next strong {
+            color: var(--express-gold);
+        }
+
+        /* ============================================================
+           TEAM NETWORK
+           ============================================================ */
+        .express-team {
+            background: var(--express-card);
+            border-radius: var(--express-radius);
+            padding: 16px;
+            border: 1px solid var(--express-card-border);
+            margin-bottom: 16px;
+        }
+
+        .express-team-levels {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .express-team-level {
+            text-align: center;
+            padding: 8px 4px;
+            background: var(--express-bg);
+            border-radius: var(--express-radius-sm);
+        }
+
+        .express-team-level-number {
+            display: block;
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--express-white);
+        }
+
+        .express-team-level-label {
+            font-size: 9px;
+            color: var(--express-grey);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            font-weight: 600;
+        }
+
+        .express-team-member {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--express-card-border);
+        }
+
+        .express-team-member:last-child {
+            border-bottom: none;
+        }
+
+        .express-team-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: var(--express-gold);
+            color: var(--express-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .express-team-info {
+            flex: 1;
+        }
+
+        .express-team-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--express-white);
+        }
+
+        .express-team-role {
+            font-size: 10px;
+            color: var(--express-grey);
+        }
+
+        .express-team-status {
+            font-size: 10px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .express-team-status.active {
+            color: var(--express-green);
+        }
+
+        .express-team-status.inactive {
+            color: var(--express-red);
+        }
+
+        .express-team-status .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        .express-team-status.active .dot {
+            background: var(--express-green);
+        }
+
+        .express-team-status.inactive .dot {
+            background: var(--express-red);
+        }
+
+        .express-team-sales {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--express-gold);
+        }
+
+        .express-view-all {
+            display: block;
+            text-align: center;
+            margin-top: 8px;
+            color: var(--express-gold);
+            font-weight: 600;
+            font-size: 12px;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .express-view-all:hover {
+            color: var(--express-gold-dark);
+        }
+
+        /* ============================================================
+           PAYMENTS & COMMISSIONS
+           ============================================================ */
+        .express-payments {
+            background: var(--express-card);
+            border-radius: var(--express-radius);
+            padding: 16px;
+            border: 1px solid var(--express-card-border);
+            margin-bottom: 16px;
+        }
+
+        .express-payments-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .express-payments-item {
+            text-align: center;
+            padding: 8px 4px;
+            background: var(--express-bg);
+            border-radius: var(--express-radius-sm);
+        }
+
+        .express-payments-number {
+            display: block;
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--express-white);
+        }
+
+        .express-payments-number.pending {
+            color: var(--express-gold);
+        }
+
+        .express-payments-number.withdrawn {
+            color: var(--express-green);
+        }
+
+        .express-payments-label {
+            font-size: 8px;
+            color: var(--express-grey);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            font-weight: 600;
+        }
+
+        .express-payment-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--express-card-border);
+        }
+
+        .express-payment-item:last-child {
+            border-bottom: none;
+        }
+
+        .express-payment-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .express-payment-icon.completed {
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--express-green);
+        }
+
+        .express-payment-icon.pending {
+            background: rgba(245, 166, 35, 0.12);
+            color: var(--express-gold);
+        }
+
+        .express-payment-info {
+            flex: 1;
+        }
+
+        .express-payment-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--express-white);
+        }
+
+        .express-payment-date {
+            font-size: 10px;
+            color: var(--express-grey);
+        }
+
+        .express-payment-amount {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--express-gold);
+        }
+
+        .express-withdraw-btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: var(--express-radius-sm);
+            background: var(--express-gold);
+            color: var(--express-bg);
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: var(--express-font);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .express-withdraw-btn:hover {
+            background: var(--express-gold-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(245, 166, 35, 0.2);
+        }
+
+        /* ============================================================
+           STATISTICS
+           ============================================================ */
+        .express-stats {
+            background: var(--express-card);
+            border-radius: var(--express-radius);
+            padding: 16px;
+            border: 1px solid var(--express-card-border);
+            margin-bottom: 16px;
+        }
+
+        .express-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .express-stats-item {
+            text-align: center;
+            padding: 8px 4px;
+            background: var(--express-bg);
+            border-radius: var(--express-radius-sm);
+        }
+
+        .express-stats-number {
+            display: block;
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--express-white);
+        }
+
+        .express-stats-number.active {
+            color: var(--express-green);
+        }
+
+        .express-stats-label {
+            font-size: 9px;
+            color: var(--express-grey);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            font-weight: 600;
+        }
+
+        .express-stats-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 16px;
+            padding: 10px 12px;
+            background: var(--express-bg);
+            border-radius: var(--express-radius-sm);
+            font-size: 12px;
+            color: var(--express-grey);
+        }
+
+        .express-stats-details strong {
+            color: var(--express-white);
+        }
+
+        .express-stats-details .gold {
+            color: var(--express-gold);
+        }
+
+        /* ============================================================
+           FOOTER
+           ============================================================ */
+        .express-footer {
+            text-align: center;
+            padding-top: 12px;
+            border-top: 1px solid var(--express-card-border);
+            font-size: 11px;
+            color: var(--express-muted);
+        }
+
+        .express-footer span {
+            color: var(--express-gold);
+        }
+
+        /* ============================================================
+           TOAST
+           ============================================================ */
+        .express-toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            padding: 10px 20px;
+            border-radius: var(--express-radius-pill);
+            background: var(--express-card);
+            color: var(--express-white);
+            font-weight: 600;
+            font-size: 12px;
+            border: 1px solid var(--express-card-border);
+            box-shadow: var(--express-shadow);
+            text-align: center;
+            max-width: 90vw;
+            font-family: var(--express-font);
+            animation: expressToastUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .express-toast.success {
+            border-color: var(--express-green);
+        }
+
+        .express-toast.error {
+            border-color: var(--express-red);
+        }
+
+        .express-toast.warning {
+            border-color: var(--express-gold);
+        }
+
+        @keyframes expressToastUp {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px) scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0) scale(1);
+            }
+        }
+
+        @keyframes expressToastDown {
+            from {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0) scale(1);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px) scale(0.9);
+            }
+        }
+
+        /* ============================================================
+           RESPONSIVE
+           ============================================================ */
+        @media (max-width: 480px) {
+            body {
+                padding: 12px;
+            }
+
+            .express-earnings-grid,
+            .express-payments-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .express-stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .express-team-levels {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .express-greeting h1 {
+                font-size: 18px;
+            }
+
+            .express-earnings-number {
+                font-size: 14px;
+            }
+
+            .express-brand-badge {
+                display: none;
+            }
+        }
+
+        @media (min-width: 601px) {
+            .express-app {
+                max-width: 560px;
+            }
+
+            .express-earnings-number {
+                font-size: 20px;
+            }
+
+            .express-stats-number {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="express-app">
+
+        <!-- ============================================================
+        HEADER
+        ============================================================ -->
+        <header class="express-header">
+            <div class="express-brand">
+                <div class="express-brand-icon">27</div>
+                <div class="express-brand-name">HUT<span>27</span></div>
+                <span class="express-brand-badge">Promoter</span>
+            </div>
+            <div class="express-header-actions">
+                <button class="express-header-btn" id="notificationBtn">
+                    <i class="fas fa-bell"></i>
+                    <span class="badge" id="notificationBadge" style="display:none;">0</span>
+                </button>
+                <div class="express-profile-mini" id="profileMenu">
+                    <span class="avatar" id="userInitials">--</span>
+                    <i class="fas fa-chevron-down"></i>
+                </div>
+            </div>
+        </header>
+
+        <!-- ============================================================
+        GREETING
+        ============================================================ -->
+        <div class="express-greeting">
+            <h1>👋 Welcome, <span id="promoterName">Loading...</span></h1>
+            <div class="express-greeting-sub">
+                <span class="express-role-badge" id="promoterRole">--</span>
+                <span class="express-location-badge"><i class="fas fa-map-pin"></i> <span id="promoterLocation">--</span></span>
+                <span class="express-status-badge">
+                    <span class="express-status-dot" id="statusDot"></span>
+                    <span id="statusText">--</span>
+                </span>
+            </div>
+        </div>
+
+        <!-- ============================================================
+        EARNINGS OVERVIEW
+        ============================================================ -->
+        <div class="express-earnings">
+            <h3 class="express-section-title" style="font-size:14px;font-weight:700;color:var(--express-white);margin-bottom:4px;">
+                <i class="fas fa-coins" style="color:var(--express-gold);"></i> Earnings Overview
+            </h3>
+            <div class="express-earnings-grid">
+                <div class="express-earnings-item">
+                    <span class="express-earnings-number" id="todayEarning">--</span>
+                    <span class="express-earnings-label">Today</span>
+                </div>
+                <div class="express-earnings-item">
+                    <span class="express-earnings-number" id="weekEarnings">--</span>
+                    <span class="express-earnings-label">This Week</span>
+                </div>
+                <div class="express-earnings-item">
+                    <span class="express-earnings-number" id="monthEarnings">--</span>
+                    <span class="express-earnings-label">This Month</span>
+                </div>
+                <div class="express-earnings-item">
+                    <span class="express-earnings-number" id="totalEarnings">--</span>
+                    <span class="express-earnings-label">Total</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+        PERFORMANCE PROGRESS
+        ============================================================ -->
+        <div class="express-progress">
+            <h3 class="express-section-title" style="font-size:14px;font-weight:700;color:var(--express-white);margin-bottom:8px;">
+                <i class="fas fa-chart-line" style="color:var(--express-gold);"></i> Performance Progress
+            </h3>
+
+            <div class="express-progress-item">
+                <div class="express-progress-header">
+                    <span class="express-progress-label">Daily Target</span>
+                    <span class="express-progress-amount" id="dailyTarget">--</span>
+                    <span class="express-progress-percent" id="dailyPercent">0%</span>
+                </div>
+                <div class="express-progress-bar">
+                    <div class="express-progress-fill" id="dailyFill" style="width:0%;"></div>
+                </div>
+                <span class="express-progress-achieved" style="font-size:11px;color:var(--express-muted);" id="dailyAchieved">--</span>
+            </div>
+
+            <div class="express-progress-item">
+                <div class="express-progress-header">
+                    <span class="express-progress-label">Weekly Target</span>
+                    <span class="express-progress-amount" id="weeklyTarget">--</span>
+                    <span class="express-progress-percent" id="weeklyPercent">0%</span>
+                </div>
+                <div class="express-progress-bar">
+                    <div class="express-progress-fill" id="weeklyFill" style="width:0%;"></div>
+                </div>
+                <span class="express-progress-achieved" style="font-size:11px;color:var(--express-muted);" id="weeklyAchieved">--</span>
+            </div>
+
+            <div class="express-progress-item">
+                <div class="express-progress-header">
+                    <span class="express-progress-label">Monthly Target</span>
+                    <span class="express-progress-amount" id="monthlyTarget">--</span>
+                    <span class="express-progress-percent" id="monthlyPercent">0%</span>
+                </div>
+                <div class="express-progress-bar">
+                    <div class="express-progress-fill" id="monthlyFill" style="width:0%;"></div>
+                </div>
+                <span class="express-progress-achieved" style="font-size:11px;color:var(--express-muted);" id="monthlyAchieved">--</span>
+            </div>
+
+            <div class="express-rank">
+                <span class="express-rank-icon" id="rankIcon">⭐</span>
+                <div class="express-rank-info">
+                    <div class="express-rank-name" id="currentRank">--</div>
+                    <div class="express-rank-next">Next: <strong id="nextRank">--</strong></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+        TEAM NETWORK
+        ============================================================ -->
+        <div class="express-team">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <h3 class="express-section-title" style="font-size:14px;font-weight:700;color:var(--express-white);">
+                    <i class="fas fa-users" style="color:var(--express-gold);"></i> My Team Network
+                </h3>
+                <span style="background:rgba(245,166,35,0.12);color:var(--express-gold);font-size:11px;font-weight:700;padding:0 12px;border-radius:var(--express-radius-pill);" id="teamTotal">0</span>
+            </div>
+
+            <div class="express-team-levels">
+                <div class="express-team-level">
+                    <span class="express-team-level-number" id="level1Count">0</span>
+                    <span class="express-team-level-label">Level 1</span>
+                </div>
+                <div class="express-team-level">
+                    <span class="express-team-level-number" id="level2Count">0</span>
+                    <span class="express-team-level-label">Level 2</span>
+                </div>
+                <div class="express-team-level">
+                    <span class="express-team-level-number" id="level3Count">0</span>
+                    <span class="express-team-level-label">Level 3</span>
+                </div>
+            </div>
+
+            <div id="teamList">
+                <!-- Rendered by JavaScript from backend -->
+            </div>
+
+            <a href="#" class="express-view-all" id="viewAllTeam">View All →</a>
+        </div>
+
+        <!-- ============================================================
+        PAYMENTS & COMMISSIONS
+        ============================================================ -->
+        <div class="express-payments">
+            <h3 class="express-section-title" style="font-size:14px;font-weight:700;color:var(--express-white);margin-bottom:4px;">
+                <i class="fas fa-credit-card" style="color:var(--express-gold);"></i> Payments & Commissions
+            </h3>
+
+            <div class="express-payments-grid">
+                <div class="express-payments-item">
+                    <span class="express-payments-number pending" id="pendingPayments">--</span>
+                    <span class="express-payments-label">Pending</span>
+                </div>
+                <div class="express-payments-item">
+                    <span class="express-payments-number" id="monthPayments">--</span>
+                    <span class="express-payments-label">This Month</span>
+                </div>
+                <div class="express-payments-item">
+                    <span class="express-payments-number" id="historyPayments">--</span>
+                    <span class="express-payments-label">History</span>
+                </div>
+                <div class="express-payments-item">
+                    <span class="express-payments-number withdrawn" id="withdrawnPayments">--</span>
+                    <span class="express-payments-label">Withdrawn</span>
+                </div>
+            </div>
+
+            <div id="paymentList">
+                <!-- Rendered by JavaScript from backend -->
+            </div>
+
+            <button class="express-withdraw-btn" id="withdrawBtn">
+                <i class="fas fa-arrow-up"></i> Request Withdrawal
+            </button>
+        </div>
+
+        <!-- ============================================================
+        MY STATISTICS
+        ============================================================ -->
+        <div class="express-stats">
+            <h3 class="express-section-title" style="font-size:14px;font-weight:700;color:var(--express-white);margin-bottom:4px;">
+                <i class="fas fa-chart-pie" style="color:var(--express-gold);"></i> My Statistics
+            </h3>
+
+            <div class="express-stats-grid">
+                <div class="express-stats-item">
+                    <span class="express-stats-number" id="teamSize">0</span>
+                    <span class="express-stats-label">Team Size</span>
+                </div>
+                <div class="express-stats-item">
+                    <span class="express-stats-number active" id="directReferrals">0</span>
+                    <span class="express-stats-label">Direct Referrals</span>
+                </div>
+                <div class="express-stats-item">
+                    <span class="express-stats-number" id="activeMembers">0</span>
+                    <span class="express-stats-label">Active Members</span>
+                </div>
+            </div>
+
+            <div class="express-stats-details">
+                <span>📅 Joined: <strong id="experienceMonths">--</strong></span>
+                <span>🎯 Total Network: <strong class="gold" id="totalNetwork">0</strong></span>
+                <span>🏆 Achievement: <strong class="gold" id="achievement">0%</strong></span>
+            </div>
+        </div>
+
+        <!-- ============================================================
+        FOOTER
+        ============================================================ -->
+        <div class="express-footer">
+            © 2026 <span>express</span> · Built for Ugandans
+        </div>
+
+    </div>
+
+    <!-- ============================================================
+    JAVASCRIPT - No Mock Data
+    ============================================================ -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+
+            // ============================================================
+            // HELPERS
+            // ============================================================
+            function formatCurrency(amount) {
+                if (!amount || amount === 0) return 'UGX 0';
+                return `UGX ${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 0 })}`;
+            }
+
+            function getInitials(name) {
+                if (!name) return '--';
+                const parts = name.split(' ');
+                if (parts.length >= 2) {
+                    return (parts[0][0] + parts[1][0]).toUpperCase();
+                }
+                return name.slice(0, 2).toUpperCase();
+            }
+
+            function showToast(message, type = 'info', duration = 3000) {
+                const old = document.querySelector('.express-toast');
+                if (old) old.remove();
+
+                const toast = document.createElement('div');
+                toast.className = `express-toast ${type}`;
+                toast.textContent = message;
+                document.body.appendChild(toast);
+
+                setTimeout(() => {
+                    toast.style.animation = 'expressToastDown 0.3s ease-out';
+                    setTimeout(() => toast.remove(), 300);
+                }, duration);
+            }
+
+            // ============================================================
+            // API CALL - FETCH PROMOTER DATA
+            // ============================================================
+            async function loadPromoterData() {
+                try {
+                    const response = await fetch('/promoter/profile', {
+                        credentials: 'include',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 401) {
+                            window.location.href = '/promoter/login';
+                            return;
+                        }
+                        throw new Error('Failed to load promoter data');
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success && data.promoter) {
+                        populatePromoter(data.promoter);
+                        await loadTeamData();
+                        await loadPaymentData();
+                    } else {
+                        showToast('⚠️ Could not load promoter data', 'error');
+                    }
+
+                } catch (error) {
+                    console.error('Error loading promoter data:', error);
+                    showToast('⚠️ Failed to load dashboard data', 'error');
+                }
+            }
+
+            // ============================================================
+            // POPULATE PROMOTER
+            // ============================================================
+            function populatePromoter(promoter) {
+                // Greeting
+                document.getElementById('promoterName').textContent = promoter.full_name || 'User';
+                document.getElementById('promoterRole').textContent = promoter.promoter_type || '--';
+                document.getElementById('promoterLocation').textContent = promoter.location || '--';
+                document.getElementById('userInitials').textContent = getInitials(promoter.full_name);
+
+                // Stats
+                document.getElementById('teamSize').textContent = promoter.team_size || 0;
+                document.getElementById('experienceMonths').textContent = promoter.experience_months || '--';
+
+                // Status
+                const statusDot = document.getElementById('statusDot');
+                const statusText = document.getElementById('statusText');
+                const status = promoter.status || 'pending';
+
+                if (status === 'verified' || status === 'active') {
+                    statusDot.className = 'express-status-dot active';
+                    statusText.textContent = 'Active';
+                } else if (status === 'pending') {
+                    statusDot.className = 'express-status-dot pending';
+                    statusText.textContent = 'Pending Verification';
+                } else {
+                    statusDot.className = 'express-status-dot';
+                    statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+                }
+
+                // Targets
+                const dailyTarget = promoter.expected_daily || 0;
+                const weeklyTarget = promoter.expected_weekly || 0;
+                const monthlyTarget = (promoter.expected_monthly || (dailyTarget * 30)) || 0;
+
+                document.getElementById('dailyTarget').textContent = formatCurrency(dailyTarget);
+                document.getElementById('weeklyTarget').textContent = formatCurrency(weeklyTarget);
+                document.getElementById('monthlyTarget').textContent = formatCurrency(monthlyTarget);
+
+                // Team total
+                document.getElementById('teamTotal').textContent = promoter.team_size || 0;
+                document.getElementById('totalNetwork').textContent = promoter.team_size || 0;
+
+                // Achievement (will be updated with actual data)
+                document.getElementById('achievement').textContent = '0%';
+            }
+
+            // ============================================================
+            // API CALL - FETCH TEAM DATA
+            // ============================================================
+            async function loadTeamData() {
+                try {
+                    const response = await fetch('/promoter/api/team', {
+                        credentials: 'include',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+
+                    if (!response.ok) {
+                        // If endpoint doesn't exist, show empty state
+                        renderTeamList([]);
+                        return;
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success && data.team) {
+                        renderTeamList(data.team);
+                        updateTeamStats(data.team);
+                    } else {
+                        renderTeamList([]);
+                    }
+
+                } catch (error) {
+                    console.warn('Team data not available:', error);
+                    renderTeamList([]);
+                }
+            }
+
+            // ============================================================
+            // RENDER TEAM LIST
+            // ============================================================
+            function renderTeamList(teamMembers) {
+                const container = document.getElementById('teamList');
+
+                if (!teamMembers || teamMembers.length === 0) {
+                    container.innerHTML = `
+                        <div style="text-align:center;padding:16px;color:var(--express-muted);font-size:13px;">
+                            <i class="fas fa-users" style="font-size:24px;display:block;margin-bottom:8px;color:var(--express-card-border);"></i>
+                            No team members yet
+                        </div>
+                    `;
+                    return;
+                }
+
+                const displayMembers = teamMembers.slice(0, 4);
+
+                container.innerHTML = displayMembers.map(member => `
+                    <div class="express-team-member">
+                        <div class="express-team-avatar">${getInitials(member.name || member.full_name)}</div>
+                        <div class="express-team-info">
+                            <div class="express-team-name">${member.name || member.full_name || 'User'}</div>
+                            <div class="express-team-role">${member.role || 'Promoter'}</div>
+                        </div>
+                        <div class="express-team-status ${member.status === 'active' ? 'active' : 'inactive'}">
+                            <span class="dot"></span> ${member.status === 'active' ? 'Active' : 'Inactive'}
+                        </div>
+                        <div class="express-team-sales">${formatCurrency(member.sales || member.total_sales || 0)}</div>
+                    </div>
+                `).join('');
+            }
+
+            // ============================================================
+            // UPDATE TEAM STATS
+            // ============================================================
+            function updateTeamStats(teamMembers) {
+                if (!teamMembers || teamMembers.length === 0) return;
+
+                const level1 = teamMembers.filter(m => (m.level || 1) === 1).length;
+                const level2 = teamMembers.filter(m => (m.level || 1) === 2).length;
+                const level3 = teamMembers.filter(m => (m.level || 1) === 3).length;
+                const active = teamMembers.filter(m => m.status === 'active').length;
+
+                document.getElementById('level1Count').textContent = level1;
+                document.getElementById('level2Count').textContent = level2;
+                document.getElementById('level3Count').textContent = level3;
+                document.getElementById('directReferrals').textContent = level1;
+                document.getElementById('activeMembers').textContent = active;
+                document.getElementById('teamTotal').textContent = teamMembers.length;
+                document.getElementById('totalNetwork').textContent = teamMembers.length;
+            }
+
+            // ============================================================
+            // API CALL - FETCH PAYMENT DATA
+            // ============================================================
+            async function loadPaymentData() {
+                try {
+                    const response = await fetch('/promoter/api/payments', {
+                        credentials: 'include',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+
+                    if (!response.ok) {
+                        renderPaymentList([]);
+                        return;
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success && data.payments) {
+                        renderPaymentList(data.payments);
+                        updatePaymentStats(data.payments);
+                    } else {
+                        renderPaymentList([]);
+                    }
+
+                } catch (error) {
+                    console.warn('Payment data not available:', error);
+                    renderPaymentList([]);
+                }
+            }
+
+            // ============================================================
+            // RENDER PAYMENT LIST
+            // ============================================================
+            function renderPaymentList(payments) {
+                const container = document.getElementById('paymentList');
+
+                if (!payments || payments.length === 0) {
+                    container.innerHTML = `
+                        <div style="text-align:center;padding:12px;color:var(--express-muted);font-size:12px;">
+                            No payment records yet
+                        </div>
+                    `;
+                    return;
+                }
+
+                const displayPayments = payments.slice(0, 3);
+
+                container.innerHTML = displayPayments.map(payment => `
+                    <div class="express-payment-item">
+                        <div class="express-payment-icon ${payment.status === 'completed' ? 'completed' : 'pending'}">
+                            <i class="fas ${payment.status === 'completed' ? 'fa-check' : 'fa-clock'}"></i>
+                        </div>
+                        <div class="express-payment-info">
+                            <div class="express-payment-title">${payment.title || payment.type || 'Payment'}</div>
+                            <div class="express-payment-date">${payment.date || payment.created_at || 'Recent'}</div>
+                        </div>
+                        <div class="express-payment-amount">${formatCurrency(payment.amount || 0)}</div>
+                    </div>
+                `).join('');
+            }
+
+            // ============================================================
+            // UPDATE PAYMENT STATS
+            // ============================================================
+            function updatePaymentStats(payments) {
+                if (!payments || payments.length === 0) {
+                    document.getElementById('pendingPayments').textContent = 'UGX 0';
+                    document.getElementById('monthPayments').textContent = 'UGX 0';
+                    document.getElementById('historyPayments').textContent = 'UGX 0';
+                    document.getElementById('withdrawnPayments').textContent = 'UGX 0';
+                    return;
+                }
+
+                const pending = payments.filter(p => p.status === 'pending')
+                    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+                const completed = payments.filter(p => p.status === 'completed')
+                    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+                const total = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+                document.getElementById('pendingPayments').textContent = formatCurrency(pending);
+                document.getElementById('monthPayments').textContent = formatCurrency(completed);
+                document.getElementById('historyPayments').textContent = formatCurrency(total);
+                document.getElementById('withdrawnPayments').textContent = formatCurrency(completed);
+            }
+
+            // ============================================================
+            // WITHDRAW BUTTON
+            // ============================================================
+            document.getElementById('withdrawBtn').addEventListener('click', function() {
+                showToast('💰 Withdrawal request feature coming soon!', 'info');
+            });
+
+            // ============================================================
+            // VIEW ALL TEAM
+            // ============================================================
+            document.getElementById('viewAllTeam').addEventListener('click', function(e) {
+                e.preventDefault();
+                showToast('👥 Full team list coming soon!', 'info');
+            });
+
+            // ============================================================
+            // LOGOUT
+            // ============================================================
+            document.getElementById('profileMenu').addEventListener('click', function() {
+                showToast('👋 Logging out...', 'info');
+                setTimeout(() => {
+                    window.location.href = '/promoter/logout';
+                }, 500);
+            });
+
+            // ============================================================
+            // INIT
+            // ============================================================
+            loadPromoterData();
+
+            console.log('🏠 express Promoter Dashboard Ready - No Mock Data');
+
+        });
+    </script>
+
+</body>
+</html>

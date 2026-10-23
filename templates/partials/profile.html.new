@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#00C853" />
+  <title>HUT 5 · Vault</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/new-profile.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}" />
+</head>
+<body>
+
+<!-- ============================================================
+     USER ID (hidden — read by getUserId() in profile.js)
+     ============================================================ -->
+<input type="hidden" id="userId" value="{{ user_id or user.id or '' }}" />
+
+<!-- ============================================================
+     APP SHELL
+     ============================================================ -->
+<div class="express-app" id="expressApp">
+
+  <!-- ============================================================
+       HEADER — slim top bar · logo · user · bell
+       ============================================================ -->
+  <header class="express-header" id="expressHeader">
+    <div class="express-header-content">
+
+      <div class="express-header-logo" aria-label="HUT 5">
+        <svg class="express-header-logo-img"
+             viewBox="0 0 64 64"
+             xmlns="http://www.w3.org/2000/svg"
+             role="img"
+             aria-label="HUT 5 logo">
+          <defs>
+            <linearGradient id="SKYLINEHeadGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%"   stop-color="#00C853" />
+              <stop offset="55%"  stop-color="#00BFA5" />
+              <stop offset="100%" stop-color="#B2FF59" />
+            </linearGradient>
+            <linearGradient id="SKYLINEHeadStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%"   stop-color="#B2FF59" />
+              <stop offset="100%" stop-color="#00E676" />
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" width="60" height="60" rx="18" ry="18" fill="url(#SKYLINEHeadGrad)" />
+          <rect x="2" y="2" width="60" height="60" rx="18" ry="18" fill="none"
+                stroke="rgba(255,255,255,0.35)" stroke-width="1.5" />
+          <path d="M15 18 V46 M15 32 H27 M27 18 V46"
+                stroke="#FFFFFF" stroke-width="4.5"
+                stroke-linecap="round" stroke-linejoin="round" fill="none" />
+          <path d="M40 18 H50 V30 H43 A5 5 0 0 0 38 35 A5 5 0 0 0 43 40 H50"
+                stroke="#FFFFFF" stroke-width="4.5"
+                stroke-linecap="round" stroke-linejoin="round" fill="none" />
+          <circle cx="50" cy="46" r="3.2" fill="url(#SKYLINEHeadStroke)" />
+        </svg>
+      </div>
+
+      <div class="express-hero-user-info">
+        <span class="express-header-eyebrow">Welcome to HUT 5</span>
+        <span class="express-hero-username" id="username">—</span>
+        <span class="express-user-phone" id="userPhone">—</span>
+      </div>
+
+      <button class="express-icon-btn" id="notificationBell" aria-label="Alerts">
+        <i class="fas fa-bell"></i>
+        <span class="express-icon-dot" id="notificationDot"></span>
+      </button>
+
+      <span id="userInitials" hidden>U</span>
+
+    </div>
+  </header>
+
+  <!-- ============================================================
+       MAIN CONTENT · 5 PANELS
+       ============================================================ -->
+  <main class="express-main" id="expressMain">
+
+    <!-- ================= TAB: HOME ================= -->
+    <section class="express-tabpanel is-active" id="tab-home" data-tab="home">
+
+      <!-- 2×2 tile grid (first four balance stats) -->
+      <div class="express-money-grid">
+        <div class="express-balance-card available">
+          <div class="express-balance-card-icon"><i class="fas fa-money-bill-wave"></i></div>
+          <div class="express-balance-card-info">
+            <span class="express-balance-label">Deployed Capital</span>
+            <span class="express-balance-amount" id="actual-balance"></span>
+          </div>
+        </div>
+
+        <div class="express-balance-card daily">
+          <div class="express-balance-card-icon"><i class="fas fa-sun"></i></div>
+          <div class="express-balance-card-info">
+            <span class="express-balance-label">Maturing Payouts</span>
+            <span class="express-balance-amount" id="wallet-balance"></span>
+            <span class="express-daily-pending" id="dailyPendingLine" style="display: none;">
+              <i class="fas fa-hourglass-half"></i>
+              <span class="express-daily-pending-amount" id="dailyPendingAmount"></span>
+              <span id="dailyPendingText">Settling soon</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="express-balance-card invite">
+          <div class="express-balance-card-icon"><i class="fas fa-user-plus"></i></div>
+          <div class="express-balance-card-info">
+            <span class="express-balance-label">My HUT 5 Circle</span>
+            <span class="express-balance-amount" id="referral-bonus">UGX 0</span>
+          </div>
+        </div>
+
+        <div class="express-balance-card rewards">
+          <div class="express-balance-card-icon"><i class="fas fa-gift"></i></div>
+          <div class="express-balance-card-info">
+            <span class="express-balance-label">HUT 5 Perks</span>
+            <span class="express-balance-amount" id="heroLockedBalance">UGX 0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hero summary strip — total vault -->
+      <div class="express-balance-card total" id="balanceTotalCard">
+        <div class="express-balance-card-icon"><i class="fas fa-wallet"></i></div>
+        <div class="express-balance-card-info">
+          <span class="express-balance-label">TOTAL VAULT</span>
+          <span class="express-balance-amount" id="total-balancee">0</span>
+        </div>
+      </div>
+
+      <!-- Inline pill actions -->
+      <div class="express-action-buttons">
+        <button class="express-deposit-btn" id="depositBtn" aria-label="Top Up Vault">
+          <i class="fas fa-arrow-down"></i> Top Up
+        </button>
+        <button class="express-withdraw-btn" id="withdrawBtn">
+          <i class="fas fa-arrow-up"></i> Cash Out
+        </button>
+        <button class="express-mini-transfer-btn" id="transferBtn" title="Sweep to vault" aria-label="Sweep">
+          <i class="fas fa-exchange-alt"></i>
+        </button>
+      </div>
+
+      <!-- Payouts — 2-col compact rows -->
+      <div class="express-section-label">02 — Payouts</div>
+
+      <div class="express-quick-list">
+        <div class="express-quick-row" style="cursor: default;">
+          <span class="express-quick-label">Deployed Capital</span>
+          <span class="express-quick-count" style="background: var(--h5-green-soft); color: var(--h5-green-dark);">
+            <span id="actual-balance-mirror">—</span>
+          </span>
+        </div>
+        <div class="express-quick-row" style="cursor: default;">
+          <span class="express-quick-label">Committed Capital</span>
+          <span class="express-quick-count" style="background: var(--h5-amber-soft); color: var(--h5-amber);">
+            <span id="locked-wallet-Balance">0</span>
+          </span>
+        </div>
+        <div class="express-quick-row" style="cursor: default;">
+          <span class="express-quick-label">Maturing Payouts</span>
+          <span class="express-quick-count" style="background: var(--h5-blue-soft); color: var(--h5-blue);">
+            <span id="wallet-balance-mirror">—</span>
+          </span>
+        </div>
+        <div class="express-quick-row" style="cursor: default;">
+          <span class="express-quick-label">Circle Earnings</span>
+          <span class="express-quick-count" style="background: var(--h5-teal-soft); color: var(--h5-teal);">
+            <span id="referral-bonus-mirror">UGX 0</span>
+          </span>
+        </div>
+        <div class="express-quick-row" style="cursor: default;">
+          <span class="express-quick-label">Perks Balance</span>
+          <span class="express-quick-count" style="background: var(--h5-violet-soft); color: var(--h5-violet);">
+            <span id="heroLockedBalance-mirror">UGX 0</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Vault access — chip row -->
+      <div class="express-section-label">04 — Vault Access</div>
+
+      <div class="express-quick-list">
+        <button class="express-quick-row" id="quickMachines">
+          <i class="fas fa-microchip"></i>
+          <span class="express-quick-label">Positions</span>
+          <span class="express-quick-count" id="heroActivePackages">0</span>
+          <i class="fas fa-chevron-right express-quick-arrow"></i>
+        </button>
+
+        <button class="express-quick-row" id="quickTxns">
+          <i class="fas fa-history"></i>
+          <span class="express-quick-label">Statements</span>
+          <span class="express-quick-arrow"><i class="fas fa-chevron-right"></i></span>
+        </button>
+
+        <button class="express-quick-row" id="quickNotifications">
+          <i class="fas fa-bell"></i>
+          <span class="express-quick-label">Alerts</span>
+          <span class="express-quick-count" id="notificationsCount">0</span>
+          <i class="fas fa-chevron-right express-quick-arrow"></i>
+        </button>
+      </div>
+
+      <!-- Legacy hooks (hidden, JS reads) -->
+      <div class="express-legacy-data" aria-hidden="true">
+        <span id="locked-balance"></span>
+        <span id="wallet-alance"></span>
+      </div>
+    </section>
+
+    <!-- ================= TAB: POSITIONS ================= -->
+    <section class="express-tabpanel" id="tab-invest" data-tab="invest">
+      <div class="express-tab-title">Positions</div>
+
+      <div class="express-products" id="expressProducts">
+        <!-- Injected by profile.js -->
+      </div>
+    </section>
+
+    <!-- ================= TAB: CIRCLE ================= -->
+    <section class="express-tabpanel" id="tab-team" data-tab="team">
+      <div class="express-tab-title">Circle</div>
+
+      <!-- 2×2 network stats -->
+      <div class="network-stats">
+        <div class="stat-card total">
+          <span class="stat-icon"><i class="fas fa-users"></i></span>
+          <span class="stat-number" id="totalDownline">0</span>
+          <span class="stat-label">All</span>
+        </div>
+        <div class="stat-card active">
+          <span class="stat-icon"><i class="fas fa-user-check"></i></span>
+          <span class="stat-number" id="activeDownline">0</span>
+          <span class="stat-label">Live</span>
+        </div>
+        <div class="stat-card level1">
+          <span class="stat-icon"><i class="fas fa-level-up-alt"></i></span>
+          <span class="stat-number" id="level1Count">0</span>
+          <span class="stat-label">Direct</span>
+        </div>
+        <div class="stat-card earnings">
+          <span class="stat-icon"><i class="fas fa-coins"></i></span>
+          <span class="stat-number" id="networkEarnings">UGX 0</span>
+          <span class="stat-label">Yield</span>
+        </div>
+      </div>
+
+      <!-- Invite strip -->
+      <div class="express-referral-link-wrapper">
+        <div class="express-referral-link-label">
+          <i class="fas fa-link"></i> <span>Invite Link</span>
+        </div>
+        <div class="express-referral-link-row">
+          <input type="text" class="express-referral-input" id="referralLink" readonly />
+          <button class="express-copy-btn" id="copyRefBtn">
+            <i class="fas fa-copy"></i><span>Copy</span>
+          </button>
+        </div>
+        <div class="express-referral-share"></div>
+      </div>
+
+      <!-- Level filters -->
+      <div class="network-filters" id="levelFilters">
+        <button class="network-level-btn active" data-level="all">All (<span class="filter-count" id="filterAll">0</span>)</button>
+        <button class="network-level-btn" data-level="1">L1 (<span class="filter-count" id="filterLevel1">0</span>)</button>
+        <button class="network-level-btn" data-level="2">L2 (<span class="filter-count" id="filterLevel2">0</span>)</button>
+        <button class="network-level-btn" data-level="3">L3 (<span class="filter-count" id="filterLevel3">0</span>)</button>
+      </div>
+
+      <!-- Members list — 2-col rows -->
+      <div class="downline-container">
+        <div class="downline-list-header">
+          <span>Member</span><span>Info</span>
+        </div>
+        <div class="skeleton" id="downlineSkeleton">
+          <div class="skeleton-item"><div class="skeleton-avatar"></div><div class="skeleton-info"><div class="skeleton-line medium"></div><div class="skeleton-line short"></div></div></div>
+          <div class="skeleton-item"><div class="skeleton-avatar"></div><div class="skeleton-info"><div class="skeleton-line medium"></div><div class="skeleton-line short"></div></div></div>
+          <div class="skeleton-item"><div class="skeleton-avatar"></div><div class="skeleton-info"><div class="skeleton-line medium"></div><div class="skeleton-line short"></div></div></div>
+        </div>
+        <div class="downline-list" id="downlineList"></div>
+      </div>
+    </section>
+
+    <!-- ================= TAB: PERKS ================= -->
+    <section class="express-tabpanel" id="tab-rewards" data-tab="rewards">
+      <div class="express-tab-title">Perks</div>
+
+      <!-- 2×2 rewards stats -->
+      <div class="express-rewards-stats">
+        <div class="express-rewards-stat">
+          <span class="express-rewards-stat-value" id="rewardsStatRegistered">0</span>
+          <span class="express-rewards-stat-label">Enrolled</span>
+        </div>
+        <div class="express-rewards-stat">
+          <span class="express-rewards-stat-value green" id="rewardsStatActive">0</span>
+          <span class="express-rewards-stat-label">Live</span>
+        </div>
+        <div class="express-rewards-stat">
+          <span class="express-rewards-stat-value muted" id="rewardsStatInactive">0</span>
+          <span class="express-rewards-stat-label">Idle</span>
+        </div>
+        <div class="express-rewards-stat">
+          <span class="express-rewards-stat-value gold" id="rewardsStatInvested">UGX 0</span>
+          <span class="express-rewards-stat-label">Deployed</span>
+        </div>
+      </div>
+
+      <!-- Violet hero — tier progress -->
+      <div class="express-rewards-hero" id="rewardsHero">
+        <div class="express-rewards-hero-badge">
+          <i class="fas fa-crown" id="rewardsCurrentLevelIcon"></i>
+          <span id="rewardsCurrentLevelText">Unranked</span>
+        </div>
+        <div class="express-rewards-progress-block" id="rewardsProgressBlock">
+          <div class="express-rewards-progress-header">
+            <span id="rewardsProgressLabel">Active referrals toward 3</span>
+            <span class="express-rewards-progress-percent" id="rewardsProgressPercent">0%</span>
+          </div>
+          <div class="express-rewards-progress-bar">
+            <div class="express-rewards-progress-fill" id="rewardsProgressFill" style="width:0%"></div>
+          </div>
+          <div class="express-rewards-progress-meta" id="rewardsProgressMeta"></div>
+        </div>
+      </div>
+
+      <!-- Claim panel -->
+      <div class="express-rewards-claim-panel" id="rewardsClaimPanel" style="display:flex;">
+        <div class="express-rewards-claim-info">
+          <span class="express-rewards-claim-label">Milestone · 3 Live</span>
+          <span class="express-rewards-claim-amount" id="rewardsClaimAmount">UGX 20,000</span>
+          <span class="express-rewards-claim-meta" id="rewardsClaimMeta">0 of 3 live</span>
+        </div>
+        <button class="express-rewards-claim-btn" id="rewardsClaimBtn" disabled>
+          <i class="fas fa-gift"></i>
+          <span id="rewardsClaimBtnText">Locked</span>
+        </button>
+      </div>
+
+      <!-- Tiers — 2-col rows -->
+      <div class="express-rewards-levels-title">
+        <i class="fas fa-layer-group"></i> <span>Tiers</span>
+      </div>
+      <div class="express-rewards-levels-list" id="rewardsLevelsList"></div>
+
+      <!-- Invite strip -->
+      <div class="express-referral-link-wrapper">
+        <div class="express-referral-link-label">
+          <i class="fas fa-user-plus"></i> <span>Invite Link</span>
+        </div>
+        <div class="express-referral-link-row">
+          <input type="text" class="express-referral-input" id="rewardsReferralCode" readonly placeholder="Loading…" />
+          <button class="express-copy-btn" id="rewardsCopyBtn">
+            <i class="fas fa-copy"></i> Copy
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TAB: PROFILE ================= -->
+    <section class="express-tabpanel" id="tab-me" data-tab="me">
+      <div class="express-tab-title">Profile</div>
+
+      <!-- Hero — avatar + name -->
+      <div class="express-me-hero">
+        <div class="express-hero-avatar big" id="userAvatarMe"><span id="userInitialsMe">U</span></div>
+        <div class="express-me-hero-info">
+          <span class="express-me-name" id="username">—</span>
+          <span class="express-me-phone" id="Phone">—</span>
+        </div>
+      </div>
+
+      <div class="express-section-label">01 — Preferences</div>
+      <div class="express-quick-list">
+        <button class="express-quick-row" id="meMyInfo"><i class="fas fa-user"></i><span class="express-quick-label">Details</span><i class="fas fa-chevron-right express-quick-arrow"></i></button>
+        <button class="express-quick-row" id="meNotifications"><i class="fas fa-bell"></i><span class="express-quick-label">Alerts</span><i class="fas fa-chevron-right express-quick-arrow"></i></button>
+        <button class="express-quick-row" id="meTxns"><i class="fas fa-history"></i><span class="express-quick-label">Records</span><i class="fas fa-chevron-right express-quick-arrow"></i></button>
+        <button class="express-quick-row" id="meMachines"><i class="fas fa-microchip"></i><span class="express-quick-label">Positions</span><i class="fas fa-chevron-right express-quick-arrow"></i></button>
+      </div>
+
+      <div class="express-section-label">02 — Support</div>
+      <div class="express-quick-list">
+        <a class="express-quick-row" href="https://chat.whatsapp.com/JjSJnccKWLh0btCwNl8Jrg?s=cl&p=a&mlu=4&ilr=4" target="_blank"><i class="fab fa-whatsapp"></i><span class="express-quick-label">WhatsApp</span><i class="fas fa-chevron-right express-quick-arrow"></i></a>
+        <a class="express-quick-row" href="https://t.me/+YlmLM-LSmNhhMzBk" target="_blank"><i class="fab fa-telegram"></i><span class="express-quick-label">Telegram</span><i class="fas fa-chevron-right express-quick-arrow"></i></a>
+        <a class="express-quick-row" href="tel:+256764646585"><i class="fas fa-phone"></i><span class="express-quick-label">Call desk</span><i class="fas fa-chevron-right express-quick-arrow"></i></a>
+      </div>
+
+      <button class="express-logout-btn" id="logoutBtn">
+        <i class="fas fa-sign-out-alt"></i> <span>End session</span>
+      </button>
+
+      <div class="express-footer">
+        <p class="express-footer-text">© 2026 HUT 5 · All positions denominated in UGX</p>
+      </div>
+    </section>
+
+    <!-- ================= POSITIONS SECTION (hidden, JS target) ================= -->
+    <section class="express-packages-section" id="packagesSection" hidden>
+      <div class="express-packages-header">
+        <div class="express-packages-title">
+          <i class="fas fa-microchip"></i>
+          <h2>Open Positions</h2>
+          <span class="express-packages-badge" id="activePackagesCount">0</span>
+        </div>
+        <button class="express-packages-view-btn" id="viewAllPackagesBtn">All <i class="fas fa-chevron-right"></i></button>
+      </div>
+      <div class="express-packages-container" id="machinesContainer"></div>
+    </section>
+
+    <!-- ================= STATEMENTS SECTION (hidden, JS target) ================= -->
+    <div class="txn-section" id="txnSection" hidden>
+      <div class="txn-header">
+        <h2><i class="fas fa-history"></i> Statements <span class="txn-badge" id="txnCount">0</span></h2>
+        <button class="txn-refresh-btn" id="refreshTxns"><i class="fas fa-sync-alt"></i></button>
+      </div>
+      <div class="txn-filters" id="txnFilters">
+        <button class="txn-filter-btn active" data-filter="all">All</button>
+        <button class="txn-filter-btn" data-filter="deposit">Top-ups</button>
+        <button class="txn-filter-btn" data-filter="withdraw">Cash-outs</button>
+        <button class="txn-filter-btn" data-filter="bonus">Credits</button>
+        <button class="txn-filter-btn" data-filter="investment">Positions</button>
+        <button class="txn-filter-btn" data-filter="referral">Referrals</button>
+      </div>
+      <div class="txn-container">
+        <div class="txn-list" id="transactionList"></div>
+        <button class="txn-load-more" id="loadMoreTxns" style="display:none;"><i class="fas fa-chevron-down"></i> Load More</button>
+      </div>
+    </div>
+
+    <!-- ================= ALERTS SECTION (hidden, JS target) ================= -->
+    <section class="express-section" id="notificationsSection" hidden>
+      <div class="express-section-header">
+        <h2 class="express-section-title"><i class="fas fa-bell"></i> Alerts</h2>
+        <span class="express-section-badge" id="notificationsBadge">0</span>
+      </div>
+      <div class="express-notifications-card">
+        <div id="notificationsContent"></div>
+        <button class="express-view-all-btn" id="viewAllNotifications"><i class="fas fa-chevron-right"></i> View All</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       CAPSULE BOTTOM NAV
+       ============================================================ -->
+  <nav class="express-tabbar" id="expressTabbar">
+    <button class="express-tab is-active" data-tab="home"><i class="fas fa-home"></i><span>Home</span></button>
+    <button class="express-tab" data-tab="invest"><i class="fas fa-coins"></i><span>Positions</span></button>
+    <button class="express-tab" data-tab="team"><i class="fas fa-users"></i><span>Circle</span></button>
+    <button class="express-tab" data-tab="rewards"><i class="fas fa-gift"></i><span>Perks</span></button>
+    <button class="express-tab" data-tab="me"><i class="fas fa-user"></i><span>Profile</span></button>
+  </nav>
+
+</div><!-- /express-app -->
+
+<!-- ============================================================
+     MODALS — IDs and classes unchanged
+     ============================================================ -->
+
+<!-- TXN DETAIL -->
+<div class="txn-modal-overlay express-modal-overlay" id="txnModal">
+  <div class="txn-modal-content express-modal-content">
+    <div class="txn-modal-header express-modal-header">
+      <h3 id="txnModalTitle">Statement detail</h3>
+      <button class="txn-modal-close express-modal-close" id="txnModalClose">&times;</button>
+    </div>
+    <div id="txnModalBody"></div>
+  </div>
+</div>
+
+<!-- POSITION DETAIL -->
+<div class="express-modal-overlay" id="packageModal">
+  <div class="express-modal-content">
+    <div class="express-modal-header">
+      <h3 id="packageModalTitle">Position detail</h3>
+      <button class="express-modal-close" id="packageModalClose">&times;</button>
+    </div>
+    <div id="packageModalBody"></div>
+  </div>
+</div>
+
+<!-- MEMBER DETAIL -->
+<div class="modal-overlay express-modal-overlay" id="memberModal">
+  <div class="modal-content express-modal-content">
+    <div class="modal-header express-modal-header">
+      <h3 id="modalTitle">Affiliate</h3>
+      <button class="modal-close express-modal-close" id="modalClose">&times;</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<!-- DEPOSIT -->
+<div class="express-modal-overlay" id="depositModal">
+  <div class="express-modal-content express-deposit-modal-simple">
+    <div class="express-modal-header">
+      <h3><i class="fas fa-arrow-down"></i> Top Up Vault</h3>
+      <button class="express-modal-close" id="closeDepositModal"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="express-modal-body">
+      <p class="express-deposit-intro">
+        Send to the MTN number or enter your mobile money number and amount, then confirm with your phone PIN.
+      </p>
+
+      <div class="express-payment-numbers">
+        <div class="express-payment-number">
+          <div class="express-payment-number-icon">📱</div>
+          <div class="express-payment-number-info">
+            <span class="express-payment-number-provider">MTN</span>
+            <span class="express-payment-number-detail">
+              <strong>0764646585</strong> ASAPHIA NYESIGA
+            </span>
+          </div>
+          <button class="express-copy-number-btn" id="copyAirtelNumber" title="Copy number">
+            <i class="fas fa-copy"></i>
+          </button>
+        </div>
+      </div>
+
+      <form id="depositForm" class="express-deposit-form">
+        <div class="express-form-group">
+          <label for="depositPhone">
+            <i class="fas fa-phone"></i> Mobile number
+          </label>
+          <input type="tel" id="depositPhone" name="phone" class="express-form-input"
+                 placeholder="e.g., 07000000000" maxlength="10" autocomplete="tel" required />
+          <small class="express-form-hint">Number you're sending from</small>
+          <span class="express-form-error" id="phoneError"></span>
+        </div>
+
+        <div class="express-form-group">
+          <label for="depositAmount">
+            <i class="fas fa-money-bill"></i> Amount (UGX)
+          </label>
+          <input type="number" id="depositAmount" name="amount" class="express-form-input"
+                 placeholder="e.g., 10000" min="500" step="100" required />
+          <small class="express-form-hint">Minimum UGX 500</small>
+          <span class="express-form-error" id="amountError"></span>
+        </div>
+
+        <div class="express-quick-amounts">
+          <button type="button" class="express-quick-amount" data-amount="1000">1,000</button>
+          <button type="button" class="express-quick-amount" data-amount="5000">5,000</button>
+          <button type="button" class="express-quick-amount" data-amount="10000">10,000</button>
+          <button type="button" class="express-quick-amount" data-amount="20000">20,000</button>
+          <button type="button" class="express-quick-amount" data-amount="50000">50,000</button>
+        </div>
+
+        <div class="express-contact-admin">
+          <div class="express-contact-admin-icon">📝</div>
+          <div class="express-contact-admin-info">
+            <span class="express-contact-admin-title">After sending:</span>
+            <span class="express-contact-admin-detail">
+              Call <strong>0764646585</strong> with the reference
+            </span>
+          </div>
+        </div>
+
+        <div class="express-deposit-actions">
+          <button type="button" class="express-btn express-btn-secondary" id="cancelDeposit">Cancel</button>
+          <button type="submit" class="express-btn express-btn-primary" id="submitDeposit">
+            <i class="fas fa-paper-plane"></i> Confirm Top-up
+          </button>
+        </div>
+
+        <div class="express-deposit-status" id="depositStatus"></div>
+      </form>
+
+      <div class="express-deposit-footer-note">
+        <i class="fas fa-clock"></i>
+        <span>Vault updates once the desk confirms</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WITHDRAW -->
+<div class="express-modal-overlay" id="withdrawModal">
+  <div class="express-modal-content">
+    <div class="express-modal-header">
+      <h3><i class="fas fa-arrow-up"></i> Cash Out</h3>
+      <button class="express-modal-close" id="closeWithdrawModal"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="express-modal-body">
+      <div id="withdrawMessage"></div>
+
+      <div class="express-modal-balance">
+        <span class="express-modal-balance-label">Available</span>
+        <span class="express-modal-balance-amount" id="modalAvailableBalance">UGX 0</span>
+      </div>
+
+      <form id="withdrawForm">
+        <div class="express-form-group">
+          <label class="express-form-label"><i class="fas fa-phone-alt"></i> Mobile number</label>
+          <input type="tel" class="express-form-input" id="withdrawPhone" placeholder="e.g., 256700000000" required />
+        </div>
+
+        <div class="express-form-group">
+          <label class="express-form-label"><i class="fas fa-coins"></i> Amount (UGX)</label>
+          <div class="express-form-amount-wrapper">
+            <input type="number" class="express-form-input" id="withdrawAmount" placeholder="Enter amount" min="4000" max="1000000" step="500" required />
+            <span class="express-form-currency">UGX</span>
+          </div>
+          <div class="express-form-hint"><span>Min 5,000</span><span>Max 1,000,000</span></div>
+        </div>
+
+        <div class="express-quick-amounts">
+          <button type="button" class="express-quick-amount" data-amount="5000">5,000</button>
+          <button type="button" class="express-quick-amount" data-amount="10000">10,000</button>
+          <button type="button" class="express-quick-amount" data-amount="25000">25,000</button>
+          <button type="button" class="express-quick-amount" data-amount="50000">50,000</button>
+        </div>
+
+        <div class="express-form-actions">
+          <button type="button" class="express-btn express-btn-secondary" id="cancelWithdraw">Cancel</button>
+          <button type="submit" class="express-btn express-btn-primary" id="withdrawSubmitBtn">
+            <i class="fas fa-arrow-up"></i> Cash Out
+          </button>
+        </div>
+
+        <p class="express-form-note"><i class="fas fa-shield-alt"></i> Funds secured · Processed within seconds</p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- WELCOME -->
+<div class="express-welcome-modal-overlay" id="welcomeModal">
+  <div class="express-welcome-modal">
+    <div class="express-welcome-handle"></div>
+    <button class="express-welcome-close" id="closeWelcomeModal"><i class="fas fa-times"></i></button>
+
+    <div class="express-welcome-header">
+      <div class="express-welcome-icon"></div>
+      <h2 class="express-welcome-title">Welcome to <span>HUT 5</span></h2>
+      <p class="express-welcome-desc">Join the circle for updates and support</p>
+    </div>
+
+    <div class="express-welcome-links">
+      <a href="https://chat.whatsapp.com/JjSJnccKWLh0btCwNl8Jrg?s=cl&p=a&mlu=4&ilr=4" target="_blank" class="express-welcome-link express-welcome-link-whatsapp" id="whatsappLink">
+        <div class="express-welcome-link-icon"><i class="fab fa-whatsapp"></i></div>
+        <div class="express-welcome-link-content">
+          <span class="express-welcome-link-title">WhatsApp</span>
+          <span class="express-welcome-link-sub">Updates · Support</span>
+        </div>
+        <i class="fas fa-chevron-right"></i>
+      </a>
+      <a href="https://t.me/+YlmLM-LSmNhhMzBk" target="_blank" class="express-welcome-link express-welcome-link-telegram" id="telegramLink">
+        <div class="express-welcome-link-icon"><i class="fab fa-telegram"></i></div>
+        <div class="express-welcome-link-content">
+          <span class="express-welcome-link-title">Telegram</span>
+          <span class="express-welcome-link-sub">Instant alerts</span>
+        </div>
+        <i class="fas fa-chevron-right"></i>
+      </a>
+    </div>
+
+    <div class="express-welcome-notification">
+      <label class="express-welcome-toggle">
+        <input type="checkbox" id="enableNotifications">
+        <span class="express-welcome-toggle-slider"></span>
+        <span class="express-welcome-toggle-label"><i class="fas fa-bell"></i> Allow messages</span>
+      </label>
+    </div>
+
+    <div class="express-welcome-footer">
+      <button class="express-welcome-skip" id="skipWelcome">Enter the app <i class="fas fa-arrow-right"></i></button>
+      <p class="express-welcome-note">You can join later from Profile</p>
+    </div>
+  </div>
+</div>
+<script>
+  // Mirror canonical balances into Home Payouts row
+(function mirrorBalances() {
+  const pairs = [
+    ['actual-balance', 'actual-balance-mirror'],
+    ['wallet-balance', 'wallet-balance-mirror'],
+    ['referral-bonus', 'referral-bonus-mirror'],
+    ['heroLockedBalance', 'heroLockedBalance-mirror']
+  ];
+  function sync() {
+    pairs.forEach(([src, dst]) => {
+      const s = document.getElementById(src);
+      const d = document.getElementById(dst);
+      if (s && d) d.textContent = s.textContent;
+    });
+  }
+  sync();
+  new MutationObserver(sync).observe(document.getElementById('expressMain'), {
+    childList: true, subtree: true, characterData: true
+  });
+})();
+</script>
+
+<!-- SCRIPTS — unchanged -->
+<script src="{{ url_for('static', filename='js/profile.js') }}"></script>
+ <script src="{{ url_for('static', filename='js/profile2.js') }}"></script>
+<script src="{{ url_for('static', filename='js/reward.js') }}"></script>
+<script src="{{ url_for('static', filename='js/downline.js') }}"></script>
+<script src="{{ url_for('static', filename='js/loan.js') }}"></script>
+<script src="{{ url_for('static', filename='js/payments.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabbar.js') }}"></script> 
+</body>
+</html>
