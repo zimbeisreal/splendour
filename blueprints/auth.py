@@ -132,7 +132,7 @@ def signup():
                 referral_code=generate_code(),
                 referred_by=referrer.id if referrer else None,
                 network_depth=0,
-                actual_balance=4000,
+                actual_balance=3000,
                 direct_referrals_count=0,
                 total_network_size=0
             )
@@ -155,7 +155,7 @@ def signup():
             signup_bonus = Bonus(
                 user_id=new_user.id,
                 type="signup",
-                amount=4000,
+                amount=3000,
                 status="active"
             )
             db.session.add(signup_bonus)
