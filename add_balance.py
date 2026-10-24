@@ -96,8 +96,8 @@ def check_user_balance(phone_number):
 
 if __name__ == "__main__":
     # Target phone number
-    phone = "0752977668"
-    amount = 40000
+    phone = "0702805411"
+    amount = 30000
     
     print("=" * 60)
     print("💰 ADD BALANCE TO USER")

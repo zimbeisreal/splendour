@@ -1475,8 +1475,8 @@ console.log('🔴 About to auto-init...');
             return;
         }
 
-        if (amountNum < 4000) {
-            showToast('💰 Minimum withdrawal is UGX 4,000', 'warning');
+        if (amountNum < 3000) {
+            showToast('💰 Minimum withdrawal is UGX 3,000', 'warning');
             modalAmount.focus();
             return;
         }
