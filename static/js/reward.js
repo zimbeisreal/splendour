@@ -86,13 +86,13 @@
         renderLevelReward(level_reward);
         renderCycleReward(cycle_reward);
 
-        // Referral code / link
-        const codeEl = $('rewardsReferralCode');
-        if (codeEl && !codeEl.value) {
-            // Reuse the same link the Team tab uses
-            const teamLink = $('referralLink');
-            if (teamLink && teamLink.value) codeEl.value = teamLink.value;
-        }
+       // Referral code / link
+       // const codeEl = $('rewardsReferralCode');
+    //     if (codeEl && !codeEl.value) {
+    //         // Reuse the same link the Team tab uses
+    //         const teamLink = $('referralLink');
+    //         if (teamLink && teamLink.value) codeEl.value = teamLink.value;
+    //     }
     }
 
     function renderLevelReward(level) {

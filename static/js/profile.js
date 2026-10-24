@@ -5,7 +5,10 @@ console.log('🔵 Profile.js loaded successfully!');
 // ============================================================
 const PRODUCTS = [
   // ── DAILY (20% per day × 25 days) ──────────────────────────
-  { id: 'daily_20k',  name: 'GOLD-Daily Withdraw',  price: 15000,  daily: 3000,  total: 75000,
+  { id: 'daily_15k',  name: 'GOLD-Daily Withdraw',  price: 15000,  daily: 3000,  total: 75000,
+    daily_rate: 20.0, duration: 25, level: 'Daily', sold: false,
+    lock_tiers: [] },
+    { id:'daily_30k',  name: 'DIAMOND-Daily Withdraw',  price: 30000,  daily: 60000,  total: 150000,
     daily_rate: 20.0, duration: 25, level: 'Daily', sold: false,
     lock_tiers: [] },
   { id: 'daily_50k',  name: 'PLATINUM-Daily Withdraw',  price: 50000,  daily: 10000,  total: 250000,

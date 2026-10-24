@@ -29,13 +29,17 @@ from blueprints.payments_helpers import (
     create_payment_record, 
     send_to_pesajet,
     create_user_package,
-    get_lock_bonus,
+    get_lock_bonus, send_payment, send_to_marzpay,
     calculate_locked_returns
 )
 from blueprints.withdraw_helpers import WithdrawalProcessor, WithdrawalException, WithdrawalQueryHelper, WithdrawalConfig, WithdrawalRecordManager
 from blueprints.payments_helpers import check_package_funds_availability
 from models import Transaction, Notification, WebhookEvent
 from decimal import Decimal
+
+import time
+from flask import current_app, jsonify, request
+from sqlalchemy.exc import IntegrityError
 
 import hmac, hashlib
 
@@ -423,7 +427,7 @@ def process_external_package_payment(user, amount, phone, package_obj, lock_days
         db.session.commit()
         
         # Send to MarzPay with lock info in description
-        marz_data, error = send_to_pesajet(
+        marz_data, error = send_payment(
             payment=payment,
             phone=phone,
             amount=amount,
@@ -916,36 +920,178 @@ def _process_webhook_business_logic(data: dict, webhook_id):
     print(f"⚠️ [bg] No matching Payment or Withdrawal "
           f"for txn={transaction_id} ref={reference}")
 
+def _handle_marz_callback(raw_body: bytes):
+    try:
+        # 1. Parse
+        try:
+            data = json.loads(raw_body)
+        except Exception:
+            return jsonify({"error": "Invalid JSON"}), 400
+
+        print(f"Payload: {json.dumps(data, indent=2)}")
+
+        # 2. Extract nested transaction
+        # 2. Extract nested transaction
+        outer = data.get("data") if isinstance(data.get("data"), dict) else data
+        transaction = outer.get("transaction") if isinstance(outer, dict) else None
+        if not isinstance(transaction, dict) or not transaction:
+            print(f"⚠️ Marz callback: no transaction object")
+            print(f"   outer keys = {list(outer.keys()) if isinstance(outer, dict) else 'N/A'}")
+            return jsonify({"error": "Missing transaction object"}), 400
+
+        status = (transaction.get("status") or "").lower()
+        reference = transaction.get("reference") or data.get("reference")
+        ext_uuid = transaction.get("uuid") or data.get("uuid")
+
+        print("🔬 DIAGNOSTIC:")
+        print(f"   data keys        = {list(data.keys())}")
+        print(f"   data['data']     = {type(data.get('data'))}")
+        print(f"   outer keys       = {list(outer.keys()) if isinstance(outer, dict) else 'N/A'}")
+        print(f"   transaction type = {type(transaction)}")
+        print(f"   transaction      = {transaction}")
+        print(f"   reference        = {reference!r}")
+        print(f"   ext_uuid         = {ext_uuid!r}")
+
+        if not reference and not ext_uuid:
+            return jsonify({"error": "Missing reference and uuid"}), 400
+
+        # 3. Map Marz status → outcome
+        outcome = _map_marz_outcome(status)
+        if outcome is None:
+            print(f"⚠️ Unknown Marz status: {status}")
+            return jsonify({"status": "ignored"}), 200
+
+        # 4. Synthesized dedup key (Marz sends no webhook id header)
+        webhook_id = f"marz_{ext_uuid}" if ext_uuid else f"marz_{reference}"
+
+        if _webhook_already_processed(webhook_id):
+            print(f"⚠️ Duplicate Marz webhook: {webhook_id}")
+            return jsonify({"status": "duplicate"}), 200
+
+        print(f"🔎 marz ref={reference} uuid={ext_uuid} status={status} outcome={outcome}")
+
+        # 5. Normalize into the flat shape handle_collection_webhook reads
+        normalized = {
+            "transactionId":     ext_uuid,
+            "reference":         reference,
+            "provider":          transaction.get("provider"),
+            "providerReference": transaction.get("provider_reference"),
+            "status":            status.upper(),
+            "event":             "payment.completed" if outcome == "success"
+                                 else "payment.failed",
+            "failureReason":     transaction.get("failure_reason"),
+            "raw_marz":          data,
+        }
+
+        # 6. Look up Payment
+        payment = None
+        if reference:
+            payment = Payment.query.filter_by(reference=reference)\
+                .with_for_update().first()
+        if not payment and ext_uuid:
+            payment = Payment.query.filter_by(external_ref=ext_uuid)\
+                .with_for_update().first()
+
+        if not payment:
+            print(f"⚠️ No matching Payment for ref={reference} uuid={ext_uuid}")
+            _record_webhook(webhook_id, normalized["event"], data, None, ext_uuid, provider="marz")
+            db.session.commit()
+            return jsonify({"status": "ignored"}), 200
+
+        print(f"📦 Matched Marz COLLECTION: payment id={payment.id} status={payment.status}")
+
+        # 7. Duplicate guard
+        if payment.status in (PaymentStatus.COMPLETED.value, PaymentStatus.FAILED.value):
+            print(f"⚠️ Payment already final: {payment.status}")
+            _record_webhook(webhook_id, normalized["event"], data, None, ext_uuid, provider="marz")
+            db.session.commit()
+            return jsonify({"status": "already_final"}), 200
+
+        # 8. Dispatch to the shared helper
+        handle_collection_webhook(payment, normalized, outcome)
+        _record_webhook(webhook_id, normalized["event"], data, None, ext_uuid)
+        db.session.commit()
+        return jsonify({"status": "ok", "type": "collection", "provider": "marz"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Marz webhook error: {e}", exc_info=True)
+        print(f"❌ Marz webhook error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Webhook processing failed"}), 500
+
+
+def _map_marz_outcome(status: str):
+    """Map a Marz transaction status to our success/failed outcome."""
+    if status in ("complete", "completed", "paid", "success", "successful"):
+        return "success"
+    if status in ("failed", "cancelled", "canceled", "expired", "rejected"):
+        return "failed"
+    return None
+
+
+
+# ============================================================
+# MAIN CALLBACK ROUTE — FAST ACK + TIMING INSTRUMENTATION
+# ============================================================
 import threading
 import time
 from flask import current_app, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 
-# ============================================================
-# MAIN CALLBACK ROUTE — FAST ACK + TIMING INSTRUMENTATION
-# ============================================================
 @bp.route("/payments/callback", methods=["POST"])
 def payment_callback():
-    """Unified PesaJet webhook handler — fast ACK, async processing."""
+    """Unified callback for PesaJet and Marz — fast ACK, async processing."""
     t_start = time.perf_counter()
 
+    # --------------------------------------------------------
+    # 0. READ RAW BODY + DETECT PROVIDER  (request context required)
+    # --------------------------------------------------------
+    raw_body = request.get_data()
+    provider = _detect_callback_provider(request, raw_body)
+
     print("=" * 60)
-    print("📞 PESAJET WEBHOOK RECEIVED")
+    print(f"📞 {provider.upper() if provider else 'UNKNOWN'} WEBHOOK RECEIVED")
     print("=" * 60)
 
+    if not provider:
+        # Unknown provider — ack 200 so the sender stops retrying
+        print("⚠️ Unknown callback provider — ignoring")
+        return jsonify({"status": "ignored"}), 200
+
     # --------------------------------------------------------
-    # 1. SIGNATURE VERIFICATION
+    # 1. PICK THE PROVIDER-SPECIFIC VERIFIER
+    # --------------------------------------------------------
+    # PesaJet uses HMAC-SHA256; Marz may use a different scheme.
+    # Your existing `_handle_pesajet_callback` / `_handle_marz_callback`
+    # already encapsulate their own verification — but we must verify
+    # IN THE REQUEST THREAD (before returning 200), because we want to
+    # reject bad signatures with 401 instead of acking them.
     # --------------------------------------------------------
     t0 = time.perf_counter()
-    raw_body = request.get_data()
-    signature = request.headers.get("X-Webhook-Signature", "")
-    webhook_id = request.headers.get("X-Webhook-Id")
 
-    if not verify_pesajet_signature(raw_body, signature):
-        elapsed = (time.perf_counter() - t_start) * 1000
-        print(f"❌ Invalid webhook signature (total {elapsed:.0f}ms)")
-        return jsonify({"error": "Signature mismatch"}), 401
+    if provider == "pesajet":
+        signature = request.headers.get("X-Webhook-Signature", "")
+        webhook_id = request.headers.get("X-Webhook-Id")
+
+        if not verify_pesajet_signature(raw_body, signature):
+            elapsed = (time.perf_counter() - t_start) * 1000
+            print(f"❌ Invalid PesaJet signature (total {elapsed:.0f}ms)")
+            return jsonify({"error": "Signature mismatch"}), 401
+
+    elif provider == "marz":
+        return _handle_marz_callback(raw_body)
+        # Replace with your Marz verifier (header name / scheme).
+        # Example — adapt to whatever Marz actually sends:
+        #marz_sig = request.headers.get("X-Marz-Signature", "")
+        #webhook_id = request.headers.get("X-Webhook-Id")
+        # if not verify_marz_signature(raw_body, marz_sig):
+        #     return jsonify({"error": "Signature mismatch"}), 401
+    else:
+        return jsonify({"status": "ignored"}), 200
+
     t_verify = (time.perf_counter() - t0) * 1000
 
     # --------------------------------------------------------
@@ -961,12 +1107,14 @@ def payment_callback():
     t_parse = (time.perf_counter() - t0) * 1000
 
     # --------------------------------------------------------
-    # 3. DEDUPLICATION CHECK
+    # 3. DEDUPLICATION
+    #    Keyed on (provider, webhook_id) so the same id from two
+    #    different providers can't collide.
     # --------------------------------------------------------
     t0 = time.perf_counter()
     if _webhook_already_processed(webhook_id):
         elapsed = (time.perf_counter() - t_start) * 1000
-        print(f"⚠️ Duplicate webhook {webhook_id} "
+        print(f"⚠️ Duplicate {provider} webhook {webhook_id} "
               f"(dedup {t_parse:.0f}ms, total {elapsed:.0f}ms)")
         return jsonify({"status": "duplicate"}), 200
     t_dedup = (time.perf_counter() - t0) * 1000
@@ -980,46 +1128,50 @@ def payment_callback():
             webhook_id,
             data.get("event"),
             data,
-            signature,
+            request.headers.get("X-Webhook-Signature"),
             data.get("transactionId"),
+            provider=provider,
         )
         db.session.commit()
     except IntegrityError:
-        # Unique constraint on webhook_id — safe duplicate
         db.session.rollback()
         elapsed = (time.perf_counter() - t_start) * 1000
-        print(f"⚠️ Duplicate webhook (unique constraint) {webhook_id} "
+        print(f"⚠️ Duplicate {provider} webhook (unique constraint) {webhook_id} "
               f"(total {elapsed:.0f}ms)")
         return jsonify({"status": "duplicate"}), 200
     except Exception as e:
-        # Audit failure must not block ACK
         db.session.rollback()
         print(f"⚠️ webhook audit commit failed (non-fatal): {e}")
     t_audit = (time.perf_counter() - t0) * 1000
 
     # --------------------------------------------------------
-    # 5. ACK THE GATEWAY IMMEDIATELY
+    # 5. ACK IMMEDIATELY
     # --------------------------------------------------------
     t_total = (time.perf_counter() - t_start) * 1000
     print(
-        f"⏱ [fast-path] verify={t_verify:.0f}ms "
-        f"parse={t_parse:.0f}ms "
-        f"dedup={t_dedup:.0f}ms "
-        f"audit={t_audit:.0f}ms "
-        f"TOTAL={t_total:.0f}ms"
+        f"⏱ [fast-path][{provider}] verify={t_verify:.0f}ms "
+        f"parse={t_parse:.0f}ms dedup={t_dedup:.0f}ms "
+        f"audit={t_audit:.0f}ms TOTAL={t_total:.0f}ms"
     )
 
-    # Capture the real app object BEFORE the thread starts.
-    # current_app is a proxy — it is not valid inside the thread.
+    # --------------------------------------------------------
+    # 6. BACKGROUND BUSINESS LOGIC  (provider-aware)
+    # --------------------------------------------------------
     app_obj = current_app._get_current_object()
 
     def process_in_background():
         with app_obj.app_context():
             try:
-                _process_webhook_business_logic(data, webhook_id)
+                if provider == "pesajet":
+                    _process_webhook_business_logic(data, webhook_id)
+                elif provider == "marz":
+                    _handle_marz_callback(data, webhook_id)
+                # If Marz reuses the same classification logic,
+                # you can simply call _process_webhook_business_logic
+                # for both and drop the branch above.
             except Exception as e:
                 app_obj.logger.error(
-                    f"Background webhook processing failed: {e}",
+                    f"[{provider}] background webhook processing failed: {e}",
                     exc_info=True,
                 )
                 try:
@@ -1027,7 +1179,6 @@ def payment_callback():
                 except Exception:
                     pass
             finally:
-                # Release the connection this thread checked out
                 try:
                     db.session.remove()
                 except Exception:
@@ -1036,79 +1187,42 @@ def payment_callback():
     threading.Thread(target=process_in_background, daemon=True).start()
 
     return jsonify({"status": "ok"}), 200
-# ============================================================
-# MAIN CALLBACK ROUTE — MUST RETURN FAST (< 1s)
-# ============================================================
-# @bp.route("/payments/callback", methods=["POST"])
-# def payment_callback():
-#     """Unified PesaJet webhook handler — fast ACK, async processing."""
-#     print("=" * 60)
-#     print("📞 PESAJET WEBHOOK RECEIVED")
-#     print("=" * 60)
 
- 
+def _detect_callback_provider(req, raw_body: bytes) -> str | None:
+    """
+    Identify which provider sent this callback.
 
-#     # 1. Signature verification (fast)
-#     raw_body = request.get_data()
-#     signature = request.headers.get("X-Webhook-Signature", "")
-#     webhook_id = request.headers.get("X-Webhook-Id")
+    PesaJet:  signed with X-Webhook-Signature, payload has top-level
+              transactionId.
+    Marz:     no signature header, payload has either:
+              - top-level `transaction` object, OR
+              - nested `data.transaction` object
+    """
+    if req.headers.get("X-Webhook-Signature") or req.headers.get("X-Webhook-Id"):
+        return "pesajet"
 
-#     if not verify_pesajet_signature(raw_body, signature):
-#         print("❌ Invalid webhook signature")
-#         return jsonify({"error": "Signature mismatch"}), 401
+    try:
+        data = json.loads(raw_body)
+    except Exception:
+        return None
 
-#     # 2. Parse JSON (fast)
-#     try:
-#         data = json.loads(raw_body)
-#     except Exception:
-#         return jsonify({"error": "Invalid JSON"}), 400
+    if not isinstance(data, dict):
+        return None
 
-#     # 3. Deduplication check (single fast query)
-#     if _webhook_already_processed(webhook_id):
-#         print(f"⚠️ Duplicate webhook delivery: {webhook_id}")
-#         return jsonify({"status": "duplicate"}), 200
+    # PesaJet fallback (no header, but flat shape)
+    if "transactionId" in data:
+        return "pesajet"
 
-#     # 4. Audit-log the raw event (fast, one INSERT)
-#     try:
-#         _record_webhook(
-#             webhook_id,
-#             data.get("event"),
-#             data,
-#             signature,
-#             data.get("transactionId"),
-#         )
-#         db.session.commit()
-#     except Exception as e:
-#         # Audit failure must not block ACK, but log it
-#         db.session.rollback()
-#         print(f"⚠️ webhook audit commit failed (non-fatal): {e}")
+    # Marz flat
+    if isinstance(data.get("transaction"), dict):
+        return "marz"
 
-#     # 5. ✅ ACK the gateway immediately, then process in background
-#     current_app_ref = current_app._get_current_object()
-#     def process_in_background():
-    
-#         with current_app_ref.app_context():
-#             try:
-#                 _process_webhook_business_logic(data, webhook_id)
-#             except Exception as e:
-#                 current_app_ref.logger.error(
-#                     f"Background webhook processing failed: {e}",
-#                     exc_info=True,
-#                 )
-#                 try:
-#                     db.session.rollback()
-#                 except Exception:
-#                     pass
-#             finally:
-#                 # Always release the session held by this thread
-#                 try:
-#                     db.session.remove()
-#                 except Exception:
-#                     pass
+    # Marz nested under "data"
+    inner = data.get("data")
+    if isinstance(inner, dict) and isinstance(inner.get("transaction"), dict):
+        return "marz"
 
-#     threading.Thread(target=process_in_background, daemon=True).start()
-
-#     return jsonify({"status": "ok"}), 200
+    return None
 
 
 

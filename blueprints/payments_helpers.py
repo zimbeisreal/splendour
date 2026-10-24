@@ -23,7 +23,7 @@ LIVEPAY_BASE_URL = os.getenv('LIVEPAY_BASE_URL', 'https://livepay.me/api')
 
 express_PACKAGE_CATALOG = {
     # ── DAILY (frontend: 20%/day × 25 days, total = profit only) ──
-    "daily_20k": {
+    "daily_15k": {
         "name": "GOLD-Daily Withdraw",
         "display_name": "GOLD-Daily Withdraw",
         "amount": 15000,
@@ -35,6 +35,33 @@ express_PACKAGE_CATALOG = {
             "total_profit": 75000,
             "total_returns": 75000,          # matches frontend `total` (profit only)
             "capital": 15000,                 # explicit, so payout code never guesses
+            "daily_rate": 20.0,
+            "total_rate": 500.0,              # 20% × 25
+            "referral_bonus": 0,
+            "support_level": "Daily",
+            "machine_emoji": "",
+        },
+        "is_active": True,
+        "is_locking_package": False,
+        "locking_bonus_rate": 0.0,
+        "machine_eligible": True,
+        "machine_type": "daily",
+        "lock_minimum_days": 0,
+        "lock_maximum_days": 0,
+        "lock_bonus_tiers": {},
+    },
+        "daily_30k": {
+        "name": "DIAMOND-Daily Withdraw",
+        "display_name": "DIAMOND-Daily Withdraw",
+        "amount": 30000,
+        "bonus_percentage": 20.0,
+        "duration_days": 25,
+        "reward_description": "Earn UGX 3,000 per day for 25 days. Total profit: UGX 75,000.",
+        "features": {
+            "daily_profit": 6000,
+            "total_profit": 150000,
+            "total_returns": 150000,          # matches frontend `total` (profit only)
+            "capital": 30000,                 # explicit, so payout code never guesses
             "daily_rate": 20.0,
             "total_rate": 500.0,              # 20% × 25
             "referral_bonus": 0,
@@ -761,6 +788,143 @@ def send_to_pesajet(payment, phone, amount, package=None, lock_details=None):
         return None, {"error": f"Payment error: {str(e)}"}
 
     
+# ============================================================
+# MARZ INNOVATIONS
+# ============================================================
+
+MARZ_BASE_URL = "https://wallet.wearemarz.com/api/v1"
+
+
+def send_to_marzpay(payment, phone, amount, package=None):
+    """Initiate payment request to MarzPay API."""
+    headers = {
+        "Authorization": f"Basic {os.environ.get('MARZ_AUTH_HEADER')}",
+        "Content-Type": "application/json"
+    }
+
+    callback_url = get_callback_url()
+    print("CALLBACK URL:", callback_url)
+
+    if payment.payment_type == "package" and package:
+        description = f"payment_for_{package.name}"
+    elif payment.payment_type == "deposit":
+        description = "account_deposit"
+    elif payment.payment_type == "media_star":
+        description = "media_star_subscription"
+    else:
+        description = "payment"
+
+    print(f"Description: {description}")
+
+    formatted_phone = phone
+    if phone.startswith('0'):
+        formatted_phone = "+256" + phone[1:]
+    elif phone.startswith('256'):
+        formatted_phone = "+" + phone
+
+    marz_amount = amount_with_charge(amount)
+    payload = {
+        "phone_number": formatted_phone,
+        "amount": int(marz_amount),
+        "country": "UG",
+        "reference": str(payment.reference),
+        "callback_url": callback_url,
+        "description": description
+    }
+
+    print("🔹 MarzPay payload:", json.dumps(payload, indent=2))
+
+    try:
+        resp = requests.post(
+            f"{MARZ_BASE_URL}/collect-money",
+            json=payload, headers=headers,
+            timeout=REQUEST_TIMEOUT_SECONDS
+        )
+        resp.raise_for_status()
+        marz_data = resp.json()
+        print("🔹 MarzPay response status:", resp.status_code)
+        print("🔹 MarzPay response body:", resp.text)
+
+        status_map = {
+            "confirmed": PaymentStatus.PENDING.value,
+            "processing": PaymentStatus.PENDING.value,
+            "approved": PaymentStatus.PENDING.value,
+            "success": PaymentStatus.PENDING.value,
+            "successful": PaymentStatus.PENDING.value,
+            "completed": PaymentStatus.COMPLETED.value,
+            "complete": PaymentStatus.COMPLETED.value,
+            "pending": PaymentStatus.PENDING.value,
+            "failed": PaymentStatus.FAILED.value,
+            "cancelled": PaymentStatus.FAILED.value,
+            "expired": PaymentStatus.FAILED.value,
+            "rejected": PaymentStatus.FAILED.value
+        }
+
+        marz_status = marz_data.get("status", "pending").lower()
+        mapped_status = status_map.get(marz_status, PaymentStatus.PENDING.value)
+
+        payment.status = mapped_status
+        payment.raw_response = json.dumps(marz_data)
+        txn = (marz_data.get("data") or {}).get("transaction") or {}
+        payment.external_ref = txn.get("uuid") or marz_data.get("transaction_id")
+
+        return marz_data, None
+
+    except requests.exceptions.HTTPError as e:
+        response_text = ""
+        status_code = None
+
+        if e.response is not None:
+            status_code = e.response.status_code
+            response_text = e.response.text
+
+        print("🔥 MarzPay HTTP ERROR")
+        print("STATUS:", status_code)
+        print("BODY:", response_text)
+
+        payment.status = PaymentStatus.FAILED.value
+        payment.raw_response = json.dumps({"status_code": status_code, "error": response_text})
+
+        return None, {
+            "error": "Payment provider rejected request",
+            "status_code": status_code,
+            "details": response_text
+        }
+
+    except requests.RequestException as e:
+        print(f"MarzPay API Request Exception: {e}")
+        payment.status = PaymentStatus.FAILED.value
+        payment.raw_response = json.dumps({"error": str(e)})
+        return None, jsonify({"error": f"Payment provider error: {str(e)}"})
+
+    except Exception as e:
+        print(f"Unexpected error in send_to_marzpay: {e}")
+        payment.status = PaymentStatus.FAILED.value
+        payment.raw_response = json.dumps({"error": str(e)})
+        return None, jsonify({"error": "Unexpected payment error"})
+
+
+# ============================================================
+# PROVIDER SWITCHER
+# ============================================================
+
+PESAJET_MAX_AMOUNT = 10000
+
+
+def send_payment(payment, phone, amount, package=None, lock_details=None):
+    """Route to correct provider by amount."""
+    try:
+        amount_int = int(amount)
+    except (TypeError, ValueError):
+        return None, {"error": f"Invalid amount: {amount}"}
+
+    if amount_int < PESAJET_MAX_AMOUNT:
+        print(f"🔀 Routing UGX {amount_int:,} → PesaJet (< {PESAJET_MAX_AMOUNT:,})")
+        return send_to_pesajet(payment=payment, phone=phone, amount=amount,
+                               package=package, lock_details=lock_details)
+    else:
+        print(f"🔀 Routing UGX {amount_int:,} → Marz Innovations (>= {PESAJET_MAX_AMOUNT:,})")
+        return send_to_marzpay(payment=payment, phone=phone, amount=amount, package=package)
 
 
 
@@ -790,7 +954,7 @@ def get_callback_url():
             return f"{ngrok_url}/payments/callback"
         return None
     else:
-        return "https://zent-co.site/payments/callback"
+        return "https://skylineshop.online/payments/callback"
 
 
 # ============================================================
