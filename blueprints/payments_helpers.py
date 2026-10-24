@@ -908,7 +908,7 @@ def send_to_marzpay(payment, phone, amount, package=None):
 # PROVIDER SWITCHER
 # ============================================================
 
-PESAJET_MAX_AMOUNT = 10000
+PESAJET_MAX_AMOUNT = 55000
 
 
 def send_payment(payment, phone, amount, package=None, lock_details=None):
