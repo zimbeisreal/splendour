@@ -30,8 +30,8 @@ class WithdrawalConfig:
     WALLET_HOLD_PERIOD_HOURS = 24
     DAILY_WITHDRAWAL_LIMIT = 1
     BUSINESS_TIMEZONE = ZoneInfo("Africa/Kampala")
-    WEEKDAY_FEE = Decimal("5.00")
-    WEEKEND_FEE = Decimal("5.00")
+    WEEKDAY_FEE = Decimal("10.00")
+    WEEKEND_FEE = Decimal("10.00")
     
 
     @staticmethod
