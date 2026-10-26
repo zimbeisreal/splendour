@@ -24,9 +24,9 @@ logger = logging.getLogger(__name__)
 # ==========================================================
 class WithdrawalConfig:
     MIN_WITHDRAWAL = Decimal("3000")
-    MAX_WITHDRAWAL = Decimal("10000")
+    MAX_WITHDRAWAL = Decimal("6000")
     MAX_WITHDRAWAL_HARD = Decimal("1000000")
-    ADMIN_REVIEW_THRESHOLD = Decimal("10000")
+    ADMIN_REVIEW_THRESHOLD = Decimal("6000")
     WALLET_HOLD_PERIOD_HOURS = 24
     DAILY_WITHDRAWAL_LIMIT = 1
     BUSINESS_TIMEZONE = ZoneInfo("Africa/Kampala")
