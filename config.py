@@ -35,11 +35,12 @@ class Config:
             "pool_size": 20,
             "max_overflow": 40,
             "pool_pre_ping": True,
-            "pool_recycle": 300,
+            "pool_recycle": 280,
             "pool_use_lifo": True,
             "pool_timeout": 30,
         }
- 
+
+
     MARZ_API_KEY = os.getenv("MARZ_API_KEY")
     MARZ_API_SECRET = os.getenv("MARZ_API_SECRET")
     MARZ_BASE_URL = os.getenv("MARZ_BASE_URL", "https://wallet.wearemarz.com/api/v1")

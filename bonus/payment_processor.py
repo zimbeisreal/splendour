@@ -84,13 +84,50 @@ def validate_purchase(payment: Payment) -> Tuple[Optional[PackageCatalog], Optio
     logger.info(f"Validated purchase: User {user.id}, Package {package_catalog.name}")
     return package_catalog, user
 
+# def has_existing_bonuses(payment: Payment) -> bool:
+#     """Check if bonuses already processed for this payment"""
+#     existing_count = ReferralBonus.query.filter_by(payment_id=payment.id).count()
+#     if existing_count > 0:
+#         logger.warning(f"Payment {payment.id} already has {existing_count} bonuses")
+#         return True
+#     return False
+
 def has_existing_bonuses(payment: Payment) -> bool:
-    """Check if bonuses already processed for this payment"""
-    existing_count = ReferralBonus.query.filter_by(payment_id=payment.id).count()
-    if existing_count > 0:
-        logger.warning(f"Payment {payment.id} already has {existing_count} bonuses")
-        return True
-    return False
+    """
+    Check if bonuses already processed for this payment.
+
+    Retries once on a stale/broken DB connection so a transient
+    pg8000 socket error doesn't get misreported as "no bonuses".
+    """
+    from sqlalchemy.exc import DBAPIError, OperationalError
+
+    for attempt in range(2):
+        try:
+            existing_count = (
+                ReferralBonus.query
+                .filter_by(payment_id=payment.id)
+                .count()
+            )
+            if existing_count > 0:
+                logger.warning(
+                    f"Payment {payment.id} already has {existing_count} bonuses"
+                )
+                return True
+            return False
+        except (DBAPIError, OperationalError) as e:
+            # Stale connection — drop it from the pool and retry once
+            logger.warning(
+                f"has_existing_bonuses: DB error on attempt {attempt + 1} "
+                f"for payment {payment.id}: {e}"
+            )
+            try:
+                db.session.rollback()
+                db.session.remove()   # evicts broken connection from pool
+            except Exception:
+                pass
+            if attempt == 1:
+                raise                 # second failure = real problem, surface it
+    return False  # unreachable, but keeps linters happy
 
 # utils/payment_processor.py — REPLACE the existing create_user_package
 

@@ -538,7 +538,7 @@ def _record_webhook(webhook_id, event, payload=None, signature=None, reference=N
     try:
         with db.session.begin_nested():
             db.session.add(WebhookEvent(
-                provider="pesajet",
+                # provider="pesajet",
                 event_type=event or "unknown",
                 payload=payload or {},
                 signature=signature,

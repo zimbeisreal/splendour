@@ -10,8 +10,8 @@
     s500: 'Something went wrong on our side. Please try again shortly.' };
 
   // ---- Products (rates: daily 1% per month, fixed once over the term) ----
-  const DAILY = [20000, 50000, 100000, 200000, 500000].map(p => ({ id: 'daily_' + p, kind: 'daily', price: p, profit: p * 0.15, total: p * 1.15, days: 0, emoji: '📈' }));
-  const FIXED = [[50000, 3, 65], [100000, 3, 65], [160000, 6, 85], [300000, 6, 85]].map(([p, d, r]) =>
+  const DAILY = [20000, 50000, 100000, 200000, 500000, 800000].map(p => ({ id: 'daily_' + p, kind: 'daily', price: p, profit: p * 0.15, total: p * 0.15 * 14, days: 14, emoji: '📈' }));
+  const FIXED = [[50000, 3, 45], [100000, 3, 55], [160000, 6, 65], [300000, 6, 75], [650000, 6, 85]].map(([p, d, r]) =>
     ({ id: 'fixed_' + p + '_' + d, kind: 'fixed', price: p, days: d, rate: r, profit: p * r / 100, total: p + p * r / 100, emoji: '🏛️' }));
   const ALL = DAILY.concat(FIXED);
 
@@ -67,7 +67,7 @@
       <h2>${f ? p.days + ' days · ' + p.rate + '%' : 'Daily earnings'}</h2>
       <div class="row"><span>💰 Invest</span><b>UGX ${ugx(p.price)}</b></div>
       <div class="row"><span>📈 ${f ? 'Profit at maturity' : 'Profit per day'}</span><b class="up">+${ugx(p.profit)}</b></div>
-      <div class="row"><span>🏦 ${f ? 'You get back' : 'Total after 3 Days'}</span><b>${ugx(p.total)}</b></div>
+      <div class="row"><span>🏦 ${f ? 'You get back' : 'Total after 14 Days'}</span><b>${ugx(p.total)}</b></div>
       ${f ? '<p class="sm">🔓 Withdrawable after maturity.</p>' : ''}
       <label for="ph">📞 Mobile money number · 07xxxxxxxx</label>
       <input id="ph" type="tel" inputmode="numeric" maxlength="10" placeholder="0771234567" autocomplete="tel">

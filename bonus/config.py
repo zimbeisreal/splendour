@@ -13,7 +13,7 @@ class BonusConfigHelper:
     
     # Bonus percentages by level
     BONUS_PERCENTAGES = {
-        1: Decimal('0.15'),   # 10%
+        1: Decimal('0.10'),   # 10%
         2: Decimal('0.01'),   # 5%
         3: Decimal('0.01'),   # 3%
         4: Decimal('0.01'),   # 2%

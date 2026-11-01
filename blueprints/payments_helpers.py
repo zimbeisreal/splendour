@@ -98,7 +98,7 @@ express_PACKAGE_CATALOG = {
     },
 
     # ── FIXED 3 MONTHS (3.5%, total_returns = capital + profit) ──
-    "fixed_50000_90": {
+    "fixed_50000_3": {
         "name": "Fixed 3-Days 50K",
         "display_name": "Fixed 3-Month 50K",
         "amount": 50000,
@@ -112,9 +112,9 @@ express_PACKAGE_CATALOG = {
         },
         "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
         "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 90, "lock_maximum_days": 90, "lock_bonus_tiers": {},
+        "lock_minimum_days": 3, "lock_maximum_days": 3, "lock_bonus_tiers": {},
     },
-    "fixed_100000_90": {
+    "fixed_100000_3": {
         "name": "Fixed 3-Days 100K",
         "display_name": "Fixed 3-Month 100K",
         "amount": 100000,
@@ -128,11 +128,11 @@ express_PACKAGE_CATALOG = {
         },
         "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
         "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 90, "lock_maximum_days": 90, "lock_bonus_tiers": {},
+        "lock_minimum_days": 3, "lock_maximum_days": 3, "lock_bonus_tiers": {},
     },
 
     # ── FIXED 6 MONTHS (4%, total_returns = capital + profit) ──
-    "fixed_160000_180": {
+    "fixed_160000_6": {
         "name": "Fixed 6-Days 160K",
         "display_name": "Fixed 6-Month 160K",
         "amount": 160000,
@@ -146,9 +146,9 @@ express_PACKAGE_CATALOG = {
         },
         "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
         "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 180, "lock_maximum_days": 180, "lock_bonus_tiers": {},
+        "lock_minimum_days": 6, "lock_maximum_days": 6, "lock_bonus_tiers": {},
     },
-    "fixed_300000_180": {
+    "fixed_300000_6": {
         "name": "Fixed 6-Days 300K",
         "display_name": "Fixed 6-Month 300K",
         "amount": 300000,
@@ -162,7 +162,7 @@ express_PACKAGE_CATALOG = {
         },
         "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
         "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 180, "lock_maximum_days": 180, "lock_bonus_tiers": {},
+        "lock_minimum_days": 6, "lock_maximum_days": 6, "lock_bonus_tiers": {},
     },
 }
 
