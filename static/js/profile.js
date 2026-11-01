@@ -136,7 +136,7 @@
 
   // ---- Tabs ----
   const card = p => `<button class="card pc" data-p="${p.id}"><div class="ph">${p.emoji}</div><div class="in"><span class="big">${ugx(p.price)}</span>
-    <span class="up">+${ugx(p.profit)}${p.kind === 'daily' ? ' / month' : ''}</span>${p.kind === 'fixed' ? `<span class="sm">${p.days / 30} months · ${p.rate}%</span>` : '<span class="sm">Earn daily</span>'}</div></button>`;
+    <span class="up">+${ugx(p.profit)}${p.kind === 'daily' ? ' / day' : ''}</span>${p.kind === 'fixed' ? `<span class="sm">${p.days} days · ${p.rate}%</span>` : '<span class="sm">Earn daily</span>'}</div></button>`;
   const tile = (i, l, v, a) => `<${a ? 'button' : 'div'} class="card tile" ${a ? `data-a="${a}"` : ''}><span class="sm">${i} ${l}</span><span class="big">${v}</span></${a ? 'button' : 'div'}>`;
 
   function render() {
