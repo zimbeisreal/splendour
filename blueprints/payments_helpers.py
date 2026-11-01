@@ -12,200 +12,157 @@ REQUEST_TIMEOUT_SECONDS = int(os.getenv('REQUEST_TIMEOUT_SECONDS', '60'))
 
 LIVEPAY_BASE_URL = os.getenv('LIVEPAY_BASE_URL', 'https://livepay.me/api')
 
-# ============================================================
-# express PACKAGE CATALOG - COMPLETE
-# ============================================================
 
-# ============================================================
-# express · EXPRESS · PACKAGE CATALOG
-# Aligned with the frontend PRODUCTS array in static/js/profile.js
-# ============================================================
 
 express_PACKAGE_CATALOG = {
-    # ── DAILY (frontend: 20%/day × 25 days, total = profit only) ──
-    "daily_15k": {
-        "name": "GOLD-Daily Withdraw",
-        "display_name": "GOLD-Daily Withdraw",
-        "amount": 15000,
-        "bonus_percentage": 20.0,
-        "duration_days": 25,
-        "reward_description": "Earn UGX 3,000 per day for 25 days. Total profit: UGX 75,000.",
+    # ── DAILY EARNINGS (1% per month, 30 days, total_returns = capital + profit) ──
+    "daily_20000": {
+        "name": "Daily Earnings 20K",
+        "display_name": "Daily Earnings 20K",
+        "amount": 20000,
+        "bonus_percentage": 1.0,
+        "duration_days": 30,
+        "reward_description": "Invest UGX 20,000. Earn UGX 200 per month (1%). Total after 1 month: UGX 20,200.",
         "features": {
-            "daily_profit": 3000,
-            "total_profit": 75000,
-            "total_returns": 75000,          # matches frontend `total` (profit only)
-            "capital": 15000,                 # explicit, so payout code never guesses
-            "daily_rate": 20.0,
-            "total_rate": 500.0,              # 20% × 25
-            "referral_bonus": 0,
-            "support_level": "Daily",
-            "machine_emoji": "",
+            "daily_profit": 6.67, "total_profit": 200, "total_returns": 20200,
+            "capital": 20000, "daily_rate": 0.0333, "total_rate": 1.0,
+            "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
         },
-        "is_active": True,
-        "is_locking_package": False,
-        "locking_bonus_rate": 0.0,
-        "machine_eligible": True,
-        "machine_type": "daily",
-        "lock_minimum_days": 0,
-        "lock_maximum_days": 0,
-        "lock_bonus_tiers": {},
+        "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
+        "machine_eligible": True, "machine_type": "daily",
+        "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
     },
-        "daily_30k": {
-        "name": "DIAMOND-Daily Withdraw",
-        "display_name": "DIAMOND-Daily Withdraw",
-        "amount": 30000,
-        "bonus_percentage": 20.0,
-        "duration_days": 25,
-        "reward_description": "Earn UGX 3,000 per day for 25 days. Total profit: UGX 75,000.",
-        "features": {
-            "daily_profit": 6000,
-            "total_profit": 150000,
-            "total_returns": 150000,          # matches frontend `total` (profit only)
-            "capital": 30000,                 # explicit, so payout code never guesses
-            "daily_rate": 20.0,
-            "total_rate": 500.0,              # 20% × 25
-            "referral_bonus": 0,
-            "support_level": "Daily",
-            "machine_emoji": "",
-        },
-        "is_active": True,
-        "is_locking_package": False,
-        "locking_bonus_rate": 0.0,
-        "machine_eligible": True,
-        "machine_type": "daily",
-        "lock_minimum_days": 0,
-        "lock_maximum_days": 0,
-        "lock_bonus_tiers": {},
-    },
-    "daily_50k": {
-        "name": "PLATINUM-Daily Withdraw",
-        "display_name": "PLATINUM-Daily Withdraw",
+    "daily_50000": {
+        "name": "Daily Earnings 50K",
+        "display_name": "Daily Earnings 50K",
         "amount": 50000,
-        "bonus_percentage": 20.0,
-        "duration_days": 25,
-        "reward_description": "Earn UGX 10,000 per day for 25 days. Total profit: UGX 250,000.",
+        "bonus_percentage": 1.0,
+        "duration_days": 30,
+        "reward_description": "Invest UGX 50,000. Earn UGX 500 per month (1%). Total after 1 month: UGX 50,500.",
         "features": {
-            "daily_profit": 10000, "total_profit": 250000, "total_returns": 250000,
-            "capital": 50000, "daily_rate": 20.0, "total_rate": 500.0,
+            "daily_profit": 16.67, "total_profit": 500, "total_returns": 50500,
+            "capital": 50000, "daily_rate": 0.0333, "total_rate": 1.0,
             "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
         },
         "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
         "machine_eligible": True, "machine_type": "daily",
         "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
     },
-    "daily_100k": {
-        "name": "BRONZE-Daily Withdraw",
-        "display_name": "BRONZE-Daily Withdraw",
-        "amount": 100000, "bonus_percentage": 20.0, "duration_days": 25,
-        "reward_description": "Earn UGX 20,000 per day for 25 days. Total profit: UGX 500,000.",
-        "features": {
-            "daily_profit": 20000, "total_profit": 500000, "total_returns": 500000,
-            "capital": 100000, "daily_rate": 20.0, "total_rate": 500.0,
-            "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "daily",
-        "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
-    },
-    "daily_200k": {
-        "name": "SILVER-Daily Withdraw",
-        "display_name": "SILVER-Daily Withdraw",
-        "amount": 200000, "bonus_percentage": 20.0, "duration_days": 25,
-        "reward_description": "Earn UGX 40,000 per day for 25 days. Total profit: UGX 1,000,000.",
-        "features": {
-            "daily_profit": 40000, "total_profit": 1000000, "total_returns": 1000000,
-            "capital": 200000, "daily_rate": 20.0, "total_rate": 500.0,
-            "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "daily",
-        "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
-    },
-
-    # ── LOCK 3 DAYS (frontend: total = capital + profit) ──
-    "lock_3d_54k": {
-        "name": "BRONZE-LOCK",
-        "display_name": "BRONZE-LOCK",
-        "amount": 54000,
-        "bonus_percentage": 83.0,          # 41,500 / 50,000
-        "duration_days": 3,
-        "reward_description": "Lock UGX 50,000 for 3 days. Total return: UGX 91,500.",
-        "features": {
-            "daily_profit": 0, "total_profit": 41500, "total_returns": 91500,
-            "capital": 50000, "daily_rate": 0.0, "total_rate": 83.0,
-            "referral_bonus": 0, "support_level": "3-Day", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 3, "lock_maximum_days": 3, "lock_bonus_tiers": {},
-    },
-    "lock_3d_100k": {
-        "name": "SILVER-LOCK",
-        "display_name": "SILVER-LOCK",
+    "daily_100000": {
+        "name": "Daily Earnings 100K",
+        "display_name": "Daily Earnings 100K",
         "amount": 100000,
-        "bonus_percentage": 66.0,          # 66,000 / 100,000
-        "duration_days": 3,
-        "reward_description": "Lock UGX 100,000 for 3 days. Total return: UGX 166,000.",
+        "bonus_percentage": 1.0,
+        "duration_days": 30,
+        "reward_description": "Invest UGX 100,000. Earn UGX 1,000 per month (1%). Total after 1 month: UGX 101,000.",
         "features": {
-            "daily_profit": 0, "total_profit": 66000, "total_returns": 166000,
-            "capital": 100000, "daily_rate": 0.0, "total_rate": 66.0,
-            "referral_bonus": 0, "support_level": "3-Day", "machine_emoji": "",
+            "daily_profit": 33.33, "total_profit": 1000, "total_returns": 101000,
+            "capital": 100000, "daily_rate": 0.0333, "total_rate": 1.0,
+            "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
         },
-        "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 3, "lock_maximum_days": 3, "lock_bonus_tiers": {},
+        "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
+        "machine_eligible": True, "machine_type": "daily",
+        "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
+    },
+    "daily_200000": {
+        "name": "Daily Earnings 200K",
+        "display_name": "Daily Earnings 200K",
+        "amount": 200000,
+        "bonus_percentage": 1.0,
+        "duration_days": 30,
+        "reward_description": "Invest UGX 200,000. Earn UGX 2,000 per month (1%). Total after 1 month: UGX 202,000.",
+        "features": {
+            "daily_profit": 66.67, "total_profit": 2000, "total_returns": 202000,
+            "capital": 200000, "daily_rate": 0.0333, "total_rate": 1.0,
+            "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
+        },
+        "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
+        "machine_eligible": True, "machine_type": "daily",
+        "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
+    },
+    "daily_500000": {
+        "name": "Daily Earnings 500K",
+        "display_name": "Daily Earnings 500K",
+        "amount": 500000,
+        "bonus_percentage": 1.0,
+        "duration_days": 30,
+        "reward_description": "Invest UGX 500,000. Earn UGX 5,000 per month (1%). Total after 1 month: UGX 505,000.",
+        "features": {
+            "daily_profit": 166.67, "total_profit": 5000, "total_returns": 505000,
+            "capital": 500000, "daily_rate": 0.0333, "total_rate": 1.0,
+            "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
+        },
+        "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
+        "machine_eligible": True, "machine_type": "daily",
+        "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
     },
 
-    # ── LOCK 7 DAYS ──
-    "lock_7d_76k": {
-        "name": "GOLD-LOCK",
-        "display_name": "GOLD-LOCK",
-        "amount": 76000,
-        "bonus_percentage": 122.86,        # 86,000 / 70,000
-        "duration_days": 7,
-        "reward_description": "Lock UGX 70,000 for 7 days. Total return: UGX 156,000.",
+    # ── FIXED 3 MONTHS (3.5%, total_returns = capital + profit) ──
+    "fixed_50000_90": {
+        "name": "Fixed 3-Days 50K",
+        "display_name": "Fixed 3-Month 50K",
+        "amount": 50000,
+        "bonus_percentage": 3.5,
+        "duration_days": 90,
+        "reward_description": "Lock UGX 50,000 for 3 months at 3.5%. Total return: UGX 51,750.",
         "features": {
-            "daily_profit": 0, "total_profit": 86000, "total_returns": 156000,
-            "capital": 70000, "daily_rate": 0.0, "total_rate": 122.86,
-            "referral_bonus": 0, "support_level": "7-Day", "machine_emoji": "",
+            "daily_profit": 0, "total_profit": 1750, "total_returns": 51750,
+            "capital": 50000, "daily_rate": 0.0, "total_rate": 3.5,
+            "referral_bonus": 0, "support_level": "3-Month", "machine_emoji": "",
         },
         "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
         "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 7, "lock_maximum_days": 7, "lock_bonus_tiers": {},
+        "lock_minimum_days": 90, "lock_maximum_days": 90, "lock_bonus_tiers": {},
     },
-    "lock_7d_115k": {
-        "name": "PLATINUM-LOCK",
-        "display_name": "PLATINUM-LOCK",
-        "amount": 115000,
-        "bonus_percentage": 50.43,         # unchanged, matches frontend
-        "duration_days": 7,
-        "reward_description": "Lock UGX 115,000 for 7 days. Total return: UGX 173,000.",
+    "fixed_100000_90": {
+        "name": "Fixed 3-Days 100K",
+        "display_name": "Fixed 3-Month 100K",
+        "amount": 100000,
+        "bonus_percentage": 3.5,
+        "duration_days": 90,
+        "reward_description": "Lock UGX 100,000 for 3 months at 3.5%. Total return: UGX 103,500.",
         "features": {
-            "daily_profit": 0, "total_profit": 58000, "total_returns": 173000,
-            "capital": 115000, "daily_rate": 0.0, "total_rate": 50.43,
-            "referral_bonus": 0, "support_level": "7-Day", "machine_emoji": "",
+            "daily_profit": 0, "total_profit": 3500, "total_returns": 103500,
+            "capital": 100000, "daily_rate": 0.0, "total_rate": 3.5,
+            "referral_bonus": 0, "support_level": "3-Month", "machine_emoji": "",
         },
         "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
         "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 7, "lock_maximum_days": 7, "lock_bonus_tiers": {},
+        "lock_minimum_days": 90, "lock_maximum_days": 90, "lock_bonus_tiers": {},
     },
 
-    # ── LOCK 14 DAYS ──
-    "lock_14d_153k": {
-        "name": "VIP-LOCK",
-        "display_name": "VIP-LOCK",
-        "amount": 153000,
-        "bonus_percentage": 56.0,          # unchanged, matches frontend
-        "duration_days": 14,
-        "reward_description": "Lock UGX 150,000 for 14 days. Total return: UGX 234,000.",
+    # ── FIXED 6 MONTHS (4%, total_returns = capital + profit) ──
+    "fixed_160000_180": {
+        "name": "Fixed 6-Days 160K",
+        "display_name": "Fixed 6-Month 160K",
+        "amount": 160000,
+        "bonus_percentage": 4.0,
+        "duration_days": 180,
+        "reward_description": "Lock UGX 160,000 for 6 months at 4%. Total return: UGX 166,400.",
         "features": {
-            "daily_profit": 0, "total_profit": 84000, "total_returns": 234000,
-            "capital": 150000, "daily_rate": 0.0, "total_rate": 56.0,
-            "referral_bonus": 0, "support_level": "14-Day", "machine_emoji": "",
+            "daily_profit": 0, "total_profit": 6400, "total_returns": 166400,
+            "capital": 160000, "daily_rate": 0.0, "total_rate": 4.0,
+            "referral_bonus": 0, "support_level": "6-Month", "machine_emoji": "",
         },
         "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
         "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 14, "lock_maximum_days": 14, "lock_bonus_tiers": {},
+        "lock_minimum_days": 180, "lock_maximum_days": 180, "lock_bonus_tiers": {},
+    },
+    "fixed_300000_180": {
+        "name": "Fixed 6-Days 300K",
+        "display_name": "Fixed 6-Month 300K",
+        "amount": 300000,
+        "bonus_percentage": 4.0,
+        "duration_days": 180,
+        "reward_description": "Lock UGX 300,000 for 6 months at 4%. Total return: UGX 312,000.",
+        "features": {
+            "daily_profit": 0, "total_profit": 12000, "total_returns": 312000,
+            "capital": 300000, "daily_rate": 0.0, "total_rate": 4.0,
+            "referral_bonus": 0, "support_level": "6-Month", "machine_emoji": "",
+        },
+        "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
+        "machine_eligible": True, "machine_type": "locked",
+        "lock_minimum_days": 180, "lock_maximum_days": 180, "lock_bonus_tiers": {},
     },
 }
 

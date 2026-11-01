@@ -132,7 +132,7 @@ def signup():
                 referral_code=generate_code(),
                 referred_by=referrer.id if referrer else None,
                 network_depth=0,
-                actual_balance=3000,
+                actual_balance=4000,
                 direct_referrals_count=0,
                 total_network_size=0
             )
