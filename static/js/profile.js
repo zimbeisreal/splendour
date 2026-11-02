@@ -79,10 +79,38 @@
       b.disabled = true; b.textContent = '⏳ Sending…';
       const r = await call('/payments/initiate', { product: p.id, amount: p.price, phone, lock_days: p.days,
         is_locking: f, type: f ? 'locking' : 'daily', lock_total: f ? p.total : 0 });
-      if (ok(r)) { close(); toast('✅ Payment request sent. Approve it on your phone.', 'ok'); setTimeout(load, 1500); }
-      else { b.disabled = false; b.textContent = '💳 Pay UGX ' + ugx(p.price); $('#pe').hidden = false; $('#pe').textContent = '⚠️ ' + fail(r); }
-    };
+
+    if (!ok(r)) {
+    b.disabled = false;
+    b.textContent = '💳 Pay UGX ' + ugx(p.price);
+    $('#pe').hidden = false;
+    $('#pe').textContent = '⚠️ ' + fail(r);
+    return;
   }
+      close();
+     toast('✅ Payment request sent. Approve it on your phone.', 'ok'); 
+       // Internal balance payment = already completed, no poll needed
+  if (r.data.status === 'completed') {
+    toast('✅ Package purchased.', 'ok');
+    load();
+    return;
+  }   
+    // Wait for the webhook to land, then reload once
+    //console.log('initiate response:', JSON.stringify(r));
+  const status = await waitForPayment(r.data.reference);
+  if (status === 'completed') {
+    toast('✅ Payment confirmed.', 'ok');
+  } else if (status === 'failed') {
+    toast('❌ Payment failed or expired.', 'err');
+  } else {
+    toast('⏱ Still pending — check again in a moment.', 'warn');
+  }
+  load();                                    // refresh the page data once
+};    
+//         setTimeout(load, 1500); }
+//      else { b.disabled = false; b.textContent = '💳 Pay UGX ' + ugx(p.price); $('#pe').hidden = false; $('#pe').textContent = '⚠️ ' + fail(r); }
+    };
+   
 
   // ---- Deposit / Withdraw ----
   function money(kind) {
@@ -108,11 +136,44 @@
       const r = dep ? await call('/payments/initiate', { payment_type: 'deposit', payment_method: 'mobile', phone, amount,
           reference: 'DEP-' + Date.now().toString(36).toUpperCase(), product: 'deposit', lock_days: 0, is_locking: false })
         : await call('/payments/withdraw', { phone_number: phone, amount });
-      if (ok(r)) { close(); toast(dep ? '✅ Approve the payment on your phone.' : '✅ Withdrawal started.', 'ok'); setTimeout(load, 1500); }
-      else { b.disabled = false; b.textContent = dep ? 'Pay now' : 'Withdraw now'; err.hidden = false; err.textContent = '⚠️ ' + fail(r); }
-    };
+         if (!ok(r)) {
+    b.disabled = false;
+    b.textContent = dep ? 'Pay now' : 'Withdraw now';
+    err.hidden = false;
+    err.textContent = '⚠️ ' + fail(r);
+    return;
   }
 
+  close();
+  toast(dep ? '✅ Approve the payment on your phone.' : '✅ Withdrawal started.', 'ok');
+
+  if (dep) {
+    console.log('initiate response:', JSON.stringify(r));
+    const status = await waitForPayment(r.data.reference);
+    if (status === 'completed')      toast('✅ Deposit credited.', 'ok');
+    else if (status === 'failed')    toast('❌ Deposit failed.', 'err');
+    else                             toast('⏱ Still pending — refresh later.', 'warn');
+  }
+
+  load();
+};
+//       if (ok(r)) { close(); toast(dep ? '✅ Approve the payment on your phone.' : '✅ Withdrawal started.', 'ok'); setTimeout(load, 1500); }
+//       else { b.disabled = false; b.textContent = dep ? 'Pay now' : 'Withdraw now'; err.hidden = false; err.textContent = '⚠️ ' + fail(r); }
+//     };
+   }
+
+async function waitForPayment(reference, { timeoutMs = 180000, intervalMs = 3000 } = {}) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    await new Promise(r => setTimeout(r, intervalMs));
+    const r = await call('/payments/status/' + encodeURIComponent(reference));
+    if (!ok(r)) continue;                        // transient error → retry
+    if (r.data.status === 'completed' || r.data.status === 'failed') {
+      return r.data.status;
+    }
+  }
+  return 'timeout';
+}
   // ---- Lists ----
   const sum = t => S.acts.filter(a => a.type === t).reduce((s, a) => s + Math.abs(Number(a.amount) || 0), 0);
   function history(type, title) {

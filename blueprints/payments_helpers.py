@@ -865,7 +865,7 @@ def send_to_marzpay(payment, phone, amount, package=None):
 # PROVIDER SWITCHER
 # ============================================================
 
-PESAJET_MAX_AMOUNT = 55000
+PESAJET_MAX_AMOUNT = 200000
 
 
 def send_payment(payment, phone, amount, package=None, lock_details=None):
@@ -911,7 +911,7 @@ def get_callback_url():
             return f"{ngrok_url}/payments/callback"
         return None
     else:
-        return "https://skylineshop.online/payments/callback"
+        return "https://sandss.online/payments/callback"
 
 
 # ============================================================

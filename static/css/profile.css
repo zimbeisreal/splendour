@@ -1,7 +1,7 @@
 :root{--navy:#0B1F4D;--cyan:#22D3EE;--yellow:#FACC15;--red:#F87171;--green:#4ADE80}
 *{box-sizing:border-box;margin:0}
 html,body{height:100%}
-body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;background:var(--navy) url(bg.svg) center bottom/cover fixed;display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;background:var(--navy) url(bg.svg) center bottom/cover fixed;display:flex;flex-direction:column;height:100dvh;}
 .top,.nav{flex:none;background:rgba(11,31,77,.95);display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.15)}
 .top{padding-top:calc(8px + env(safe-area-inset-top))}
 .top b{flex:1;font-size:15px}

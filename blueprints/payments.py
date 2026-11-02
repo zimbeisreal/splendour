@@ -169,9 +169,15 @@ def handle_deposit_payment(user, validated):
     phone = validated["phone"]
     
     # Check for existing payment
-    existing_response = handle_existing_payment(user, amount, "deposit")
-    if existing_response:
-        return existing_response
+    existing = handle_existing_payment(user, amount, "deposit")
+    if existing:
+        return jsonify({
+            "reference": existing.reference,
+            "status":    existing.status,
+            "payment_type": "deposit",
+            "message":   "Deposit already pending. Check your phone.",
+        }), 200    
+       
     
     # Create payment record
     payment = create_payment_record(user, amount, phone, "deposit")
@@ -209,8 +215,19 @@ def process_internal_package_payment(user, package_obj, lock_days=0, is_locking=
     from decimal import Decimal
     import uuid
     import json
-    
+
     amount = Decimal(str(package_obj.amount))
+    # Check for existing payment
+    existing_payment = handle_existing_payment(user, package_obj.amount, "package")
+    if existing_payment:
+        print(f"⚠️ Existing payment found: {existing_payment.reference}")
+        return jsonify({
+            "reference": existing_payment.reference,
+            "status": existing_payment.status,
+            "note": "Idempotent: existing record returned"
+        }), 200
+    
+    
     actual_balance = Decimal(str(user.actual_balance or 0))
     
     # ✅ DEBUG: Log what we're processing
@@ -243,15 +260,7 @@ def process_internal_package_payment(user, package_obj, lock_days=0, is_locking=
         
         db.session.add(user)
         
-        # Check for existing payment
-        existing_payment = handle_existing_payment(user, package_obj.amount, "package")
-        if existing_payment:
-            print(f"⚠️ Existing payment found: {existing_payment.reference}")
-            return jsonify({
-                "reference": existing_payment.reference,
-                "status": existing_payment.status,
-                "note": "Idempotent: existing record returned"
-            }), 200
+
         
         # Create payment record with lock details
         print("📝 Creating payment record...")
@@ -974,7 +983,7 @@ def _handle_marz_callback(raw_body: bytes):
         normalized = {
             "transactionId":     ext_uuid,
             "reference":         reference,
-            "provider":          transaction.get("provider"),
+            #"provider":          transaction.get("provider"),
             "providerReference": transaction.get("provider_reference"),
             "status":            status.upper(),
             "event":             "payment.completed" if outcome == "success"
@@ -994,7 +1003,7 @@ def _handle_marz_callback(raw_body: bytes):
 
         if not payment:
             print(f"⚠️ No matching Payment for ref={reference} uuid={ext_uuid}")
-            _record_webhook(webhook_id, normalized["event"], data, None, ext_uuid, provider="marz")
+            _record_webhook(webhook_id, normalized["event"], data, None, ext_uuid)
             db.session.commit()
             return jsonify({"status": "ignored"}), 200
 
@@ -1229,6 +1238,43 @@ def _detect_callback_provider(req, raw_body: bytes) -> str | None:
 # ============================================================
 # GET PACKAGE CATALOG ENDPOINT
 # ============================================================
+@bp.route("/payments/status/<reference>", methods=["GET"])
+def payment_status(reference):
+    user = get_authenticated_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    payment = Payment.query.filter_by(
+        reference=reference, user_id=user.id
+    ).first()
+    if payment:
+        
+
+        return jsonify({
+            "reference": payment.reference,
+            "status":    payment.status,          # pending | completed | failed
+            "payment_type": payment.payment_type,
+        })
+
+        # 2. Try Withdrawal (payouts)
+    withdrawal = Withdrawal.query.filter_by(
+        reference=reference, user_id=user.id
+    ).first()
+    if withdrawal:
+        # normalize: map internal statuses to the frontend's expected set
+        status = withdrawal.status
+        if status in ("completed",):
+            normalized = "completed"
+        elif status in ("failed", "cancelled", "refunded", "rejected"):
+            normalized = "failed"
+        else:
+            normalized = "pending"      # pending, processing, initiated, queued
+        return jsonify({
+            "reference": withdrawal.reference,
+            "status":    normalized,
+            "kind":      "withdrawal",
+        })
+    return jsonify({"error": "Not found"}), 404
 
 @bp.route("/payments/packages", methods=['GET'])
 def get_packages():
@@ -2313,433 +2359,7 @@ def withdrawal_callback():
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
-# MARZ_BASE_URL = 'https://wallet.wearemarz.com/api/v1'
-# #=================================================================================================================
-# @bp.route("/payments/withdraw/", methods=["POST"])
-# def withdraw_():
-#     """
-#     Main withdrawal endpoint with LivePay integration
-#     """
-    
-#     data = request.get_json(force=True, silent=True)
-#     amount = data.get("amount")
-#     payment_type = data.get("payment_type", "withdrawal")
-#     recipient_phone = data.get("recipient_phone") if payment_type == "send_money" else None
-#     phone_number = None
 
-#     # Authentication
-#     user_id = session.get("user_id")
-#     if not user_id:
-#         return jsonify({"error": "User not authenticated"}), 401
-    
-#     user = db.session.get(User, user_id)
-#     if not user:
-#         return jsonify({"error": "User not found"}), 404
-    
-#     # Determine phone number
-#     if payment_type == "send_money":
-#         phone_number = user.phone
-#         if not phone_number:
-#             return jsonify({"error": "User does not have a registered phone number"}), 400
-#     else:
-#         phone_number = data.get("phone") or data.get("phone_number")
-
-#     # Generate idempotency key
-#     idempotency_key = request.headers.get('Idempotency-Key')
-#     if not idempotency_key:
-#         import hashlib
-#         key_material = f"{session.get('user_id')}:{amount}:{phone_number}:{datetime.now().date()}"
-#         idempotency_key = hashlib.sha256(key_material.encode()).hexdigest()
-    
-#     logger.info(f"The Idempotency key is {idempotency_key}")
-#     logger.info(f"WITHDRAW PROCESSING STARTED: {data}, {amount}, {phone_number}")
-
-#     # Validation
-#     if not request.is_json:
-#         return jsonify({"error": "Request must be JSON"}), 400
-    
-#     if payment_type == "send_money" and not recipient_phone:
-#         return jsonify({"error": "Recipient phone number required for send money"}), 400  
-      
-#     if payment_type != "send_money" and not phone_number:
-#         return jsonify({"error": "Phone number is required"}), 400
-    
-#     if payment_type != "send_money" and not amount:
-#         return jsonify({"error": "Amount is required"}), 400
-
-#     try:
-#         # Step 1: Process withdrawal internally (validate, deduct balances, create record)
-#         amount_decimal = Decimal(str(amount))
-#         success, message, withdrawal_data = WithdrawalProcessor.process_withdrawal_request(
-#             user_id, amount_decimal, phone_number, idempotency_key
-#         )
-        
-#         if not success:
-#             return jsonify({"error": message}), 400
-        
-#         if withdrawal_data.get('already_processed'):
-#             return jsonify({
-#                 "success": True,
-#                 "message": message,
-#                 "withdrawal_id": withdrawal_data['reference'],
-#                 "already_processed": True
-#             }), 200
-        
-#         # ============================================================
-#         # STEP 2: SEND TO LIVEPAY (REPLACING MARZPAY)
-#         # ============================================================
-#         merchant_reference = withdrawal_data['reference']
-#         net_amount = withdrawal_data['net_amount']
-        
-#         # Determine phone and description
-#         if payment_type == "send_money":
-#             livepay_phone = recipient_phone
-#             description = "send_money"
-#             print(f"💰 SENDING MONEY to recipient: {livepay_phone}")
-#         else:
-#             livepay_phone = phone_number
-#             description = "customer_withdraw"
-#             print(f"💰 PROCESSING WITHDRAWAL for user: {livepay_phone}")
-        
-#         # Format phone for LivePay (without +)
-#         formatted_phone = livepay_phone.strip()
-#         if formatted_phone.startswith('0'):
-#             formatted_phone = "256" + formatted_phone[1:]
-#         elif formatted_phone.startswith('+'):
-#             formatted_phone = formatted_phone[1:]
-#         elif formatted_phone.startswith('256') and len(formatted_phone) == 12:
-#             pass  # Already correct
-#         else:
-#             # Extract last 9 digits
-#             digits = re.sub(r'\D', '', formatted_phone)
-#             if len(digits) >= 9:
-#                 formatted_phone = "256" + digits[-9:]
-#             else:
-#                 formatted_phone = "256" + digits
-        
-#         # LivePay callback URL
-#         CALL_BACK_URL = "https://nexa-co.online/payments/withdrawal-callback"
-        
-#         # Build LivePay payload
-#         payload = {
-#             "accountNumber": os.environ.get('LIVEPAY_ACCOUNT_NUMBER'),
-#             "phoneNumber": formatted_phone,
-#             "amount": int(float(net_amount)),
-#             "currency": "UGX",
-#             "reference": merchant_reference[:30].replace(" ", ""),
-#             "description": description[:50]
-#         }
-        
-#         print("🔹 LivePay payload:", json.dumps(payload, indent=2))
-        
-#         # Call LivePay API
-#         headers = {
-#             "Authorization": f"Bearer {os.environ.get('LIVEPAY_API_KEY')}",
-#             "Content-Type": "application/json"
-#         }
-        
-#         print(f"Calling LivePay API for withdrawal {merchant_reference}", flush=True)
-#         response = requests.post(
-#             f"{LIVEPAY_BASE_URL}/send-money",
-#             json=payload,
-#             headers=headers,
-#             timeout=60
-#         )
-        
-#         print(f"LivePay response status: {response.status_code}, body: {response.text}", flush=True)
-#         response.raise_for_status()
-#         livepay_data = response.json()
-        
-#         # ============================================================
-#         # STEP 3: PROCESS LIVEPAY RESPONSE
-#         # ============================================================
-#         if livepay_data.get("success"):
-#             from blueprints.withdraw_helpers import WithdrawalRecordManager
-#             WithdrawalRecordManager.update_status(
-#                 withdrawal_data['withdrawal_id'], 
-#                 "processing",
-#                 external_ref=livepay_data.get("internal_reference")
-#             )
-#             db.session.commit()
-            
-#             return jsonify({
-#                 "success": True,
-#                 "message": "Withdrawal request submitted successfully",
-#                 "withdrawal_id": merchant_reference,
-#                 "reference": merchant_reference,
-#                 "external_reference": livepay_data.get("internal_reference"),
-#                 "net_amount": str(withdrawal_data.get('net_amount', amount)),
-#                 "fee": str(withdrawal_data.get('fee', '0')),
-#                 "status": "processing",
-#                 "livepay_response": livepay_data
-#             }), 200
-#         else:
-#             # LivePay returned failure
-#             error_msg = livepay_data.get("message", "Unknown error")
-#             logger.error(f"LivePay withdrawal failed: {error_msg}")
-            
-#             WithdrawalProcessor.fail_withdrawal(
-#                 withdrawal_data['withdrawal_id'],
-#                 user_id,
-#                 amount_decimal,
-#                 withdrawal_data.get('balances', {})
-#             )
-            
-#             return jsonify({"error": f"Withdrawal failed: {error_msg}"}), 400
-
-#     except requests.exceptions.RequestException as e:
-#         print(f"LivePay request error: {str(e)}", flush=True)
-        
-#         # Parse error
-#         error_msg = "Payment gateway temporarily unavailable"
-#         if e.response:
-#             try:
-#                 error_json = e.response.json()
-#                 error_msg = error_json.get("error", error_json.get("message", str(e)))
-#             except:
-#                 error_msg = e.response.text or str(e)
-        
-#         # Reverse the withdrawal since LivePay failed
-#         if 'withdrawal_data' in locals():
-#             WithdrawalProcessor.fail_withdrawal(
-#                 withdrawal_data['withdrawal_id'],
-#                 user_id,
-#                 amount_decimal,
-#                 withdrawal_data.get('balances', {})
-#             )
-        
-#         return jsonify({
-#             "error": error_msg,
-#             "details": "Your funds have been refunded. Please try again later."
-#         }), 502
-        
-#     except WithdrawalException as e:
-#         print(f"Withdrawal processing error: {str(e)}", flush=True)
-#         return jsonify({"error": str(e)}), 400
-        
-#     except Exception as e:
-#         print(f"Unexpected error in withdrawal: {str(e)}", flush=True)
-        
-#         # Attempt to reverse on any unexpected error
-#         if 'withdrawal_data' in locals():
-#             WithdrawalProcessor.fail_withdrawal(
-#                 withdrawal_data['withdrawal_id'],
-#                 user_id,
-#                 amount_decimal,
-#                 withdrawal_data.get('balances', {})
-#             )
-        
-#         return jsonify({
-#             "error": "Withdrawal processing failed",
-#             "details": "Your funds have been refunded. Please try again."
-#         }), 500
-
-
-
-# @bp.route("/payments/withdraw", methods=["POST"])
-# def withdraw():
-#     """
-#     Main withdrawal endpoint with MarzPay integration
-#     """
- 
-#     data = request.get_json(force=True, silent=True)
-#     amount = data.get("amount")
-  
-#     payment_type = data.get("payment_type", "withdrawal")
-#     recipient_phone = data.get("recipient_phone") if payment_type == "send_money" else None
-
-#     phone_number = None
-
-#     user_id = session.get("user_id")
-#     if not user_id:
-#         return jsonify({"error": "User not authenticated"}), 401
-    
-#     user = db.session.get(User, user_id)
-#     if not user:
-#         return jsonify({"error": "User not found"}), 404
-    
-#     if payment_type == "send_money":
-#         phone_number = user.phone
-#         if not phone_number:
-#             return jsonify({"error": "User does not have a registered phone number"}), 400
-#     else:
-#         phone_number = data.get("phone") or data.get("phone_number")
-
-#     idempotency_key = request.headers.get('Idempotency-Key')
-#     if not idempotency_key:
-#         import hashlib
-#         key_material = f"{session.get('user_id')}:{amount}:{phone_number}:{datetime.now().date()}"
-#         idempotency_key = hashlib.sha256(key_material.encode()).hexdigest()
-#     logger.info(f"The Idempotency key is {idempotency_key}")
-#     print("MOBILE DEBUG:", request.headers)
-#     print("BODY:", request.data)
-#     logger.info(f"WITHDRAW PROCESSING STARTED: {data}, {amount}, {phone_number}")
-
-
-#     if not request.is_json:
-#         return jsonify({"error": "Request must be JSON"}), 400
-    
-#     if payment_type == "send_money" and not recipient_phone:
-#         return jsonify({"error": "Recipient phone number required for send money"}), 400  
-      
-#     if payment_type != "send_money" and not phone_number:
-#         return jsonify({"error": "Phone number is required"}), 400
-    
-#     if payment_type != "send_money" and not amount:
-#         return jsonify({"error": "Amount is required"}), 400
-
-#     user_id = session.get("user_id")
-#     if not user_id:
-#         return jsonify({"error": "User not authenticated"}), 401
-
-#     try:
-#         # Convert amount to Decimal for processing
-#         amount_decimal = Decimal(str(amount))
-        
-#         # Step 1: Process withdrawal internally (validate, deduct balances, create record)
-#         success, message, withdrawal_data = WithdrawalProcessor.process_withdrawal_request(
-#             user_id, amount_decimal, phone_number, idempotency_key
-#         )
-        
-#         if not success:
-#             return jsonify({"error": message}), 400
-        
-#         if withdrawal_data.get('already_processed'):
-#             return jsonify({
-#                 "success": True,
-#                 "message": message,
-#                 "withdrawal_id": withdrawal_data['reference'],
-#                 "already_processed": True
-#             }), 200
-        
-       
-#         merchant_reference = withdrawal_data['reference'] 
-#         amount = withdrawal_data['net_amount']
-        
-#         CALL_BACK_URL = "https://nexa-co.online/withdraw/callback" #'https://bedfast-kamron-nondeclivitous.ngrok-free.dev/payments/callback' 
-#         if payment_type == "send_money":
-#             marzpay_phone = recipient_phone
-#             description = "send_money"
-#             print(f"💰 SENDING MONEY to recipient: {marzpay_phone}")
-#         else:
-#             marzpay_phone = phone_number  # Use user's own phone
-#             description = "customer_withdraw"
-#             print(f"💰 PROCESSING WITHDRAWAL for user: {marzpay_phone}")
-        
-#         formatted_phone = marzpay_phone.strip()
-#         if formatted_phone.startswith('0'):
-#             formatted_phone = f"+256{formatted_phone[1:]}"
-#         elif formatted_phone.startswith('256'):
-#             formatted_phone = f"+{formatted_phone}"
-#         elif not formatted_phone.startswith('+'):
-#             formatted_phone = f"+256{formatted_phone[-9:]}"
-        
-#         payload = {
-#             "reference": withdrawal_data['reference'],
-#             "amount":  withdrawal_data['net_amount'],                                                  #int(amount), 
-#             "phone_number": formatted_phone,  
-#             "country": "UG",
-#             "description": "customer_withdraw",
-#             "callback_url": CALL_BACK_URL,
-#         }
-
-#         if payment_type == "send_money":
-#             payload["metadata"] = {
-#                 "payment_type": "send_money",
-#                 "recipient_name": data.get("recipient_name", ""),
-#                 "sender_id": user_id
-#             }
-            
-#         print("🔹 MarzPay payload:", json.dumps(payload, indent=2))
-#         headers = {
-#             "Authorization": f"Basic {os.environ.get('MARZ_AUTH_HEADER')}",
-#             "Content-Type": "application/json"
-#         }
-
-#         # Step 3: Call MarzPay API
-#         print(f"Calling MarzPay API for withdrawal {merchant_reference}", flush=True)
-#         response = requests.post(
-#             f"{MARZ_BASE_URL}/send-money", 
-#             json=payload, 
-#             headers=headers, 
-#             timeout=60
-#         )
-        
-#         print(f"MarzPay response status: {response.status_code}, body: {response.text}", flush=True)
-#         response.raise_for_status()
-#         marz_data = response.json()
-
-#         # Step 4: Update withdrawal status based on MarzPay response
-#         transaction_status = marz_data.get('data', {}).get('transaction', {}).get('status')
-#         transaction_uuid = marz_data.get('data', {}).get('transaction', {}).get('uuid')  #marz_data.get('data', {}).get('transaction', {}).get('uuid')
-#         if transaction_status in ['pending', 'processing']:
-#             from blueprints.withdraw_helpers import WithdrawalRecordManager
-#             WithdrawalRecordManager.update_status(
-#                 withdrawal_data['withdrawal_id'], 
-#                 "processing",  
-#                 external_ref=transaction_uuid
-#             )
-#             db.session.commit()
-            
-#             return jsonify({
-#                 "success": True,
-#                 "message": "Withdrawal request submitted successfully",
-#                 "withdrawal_id": merchant_reference,
-#                 "marz_response": marz_data,
-#                 "net_amount": str(withdrawal_data.get('net_amount', amount)),
-#                 "fee": str(withdrawal_data.get('fee', '0'))
-#             }), 200
-#         elif transaction_status == 'failed':
-#             # Immediate failure - rare but possible
-#             WithdrawalProcessor.fail_withdrawal(
-#                 withdrawal_data['withdrawal_id'],
-#                 user_id,
-#                 amount_decimal,
-#                 withdrawal_data.get('balances', {})
-#             )
-#             return jsonify({"error": "Withdrawal failed"}), 400
-#         else:
-#             # MarzPay returned non-success status
-#             raise Exception(f"MarzPay returned status: {marz_data.get('status')}")
-
-#     except requests.exceptions.RequestException as e:
-#         print(f"MarzPay request error: {str(e)}", flush=True)
-        
-#         # Reverse the withdrawal since MarzPay failed
-#         if 'withdrawal_data' in locals():
-#             WithdrawalProcessor.fail_withdrawal(
-#                 withdrawal_data['withdrawal_id'],
-#                 user_id,
-#                 amount_decimal,
-#                 withdrawal_data.get('balances', {})
-#             )
-        
-#         return jsonify({
-#             "error": "Payment gateway temporarily unavailable",
-#             "details": "Your funds have been refunded. Please try again later."
-#         }), 502
-        
-#     except WithdrawalException as e:
-#         print(f"Withdrawal processing error: {str(e)}", flush=True)
-#         return jsonify({"error": str(e)}), 400
-        
-#     except Exception as e:
-#         print(f"Unexpected error in withdrawal: {str(e)}", flush=True)
-        
-#         # Attempt to reverse on any unexpected error
-#         if 'withdrawal_data' in locals():
-#             WithdrawalProcessor.fail_withdrawal(
-#                 withdrawal_data['withdrawal_id'],
-#                 user_id,
-#                 amount_decimal,
-#                 withdrawal_data.get('balances', {})
-#             )
-        
-#         return jsonify({
-#             "error": "Withdrawal processing failed",
-#             "details": "Your funds have been refunded. Please try again."
-#         }), 500
-    
 #=================================================================================================
 #=================================================================================================
 
