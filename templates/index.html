@@ -1,61 +1,72 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
+<!-- If the API is on another origin, add it to connect-src -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>S&amp;S Group · Sign in</title>
+<meta name="color-scheme" content="light dark">
+<title>Splendour | Sign in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&amp;display=swap">
 <link rel="stylesheet" href="static/main.css">
 </head>
 <body>
-<main class="ss-wrap">
-  <header class="ss-head">
-    <div class="ss-logo">S&amp;S</div>
-    <h1>S&amp;S Group</h1>
-    <p class="ss-slogan">A single step is a start.</p>
-    <p class="ss-desc">Grow your money with trusted capital investments.</p>
+<div class="app" id="app" data-mode="login">
+  <header class="panel">
+    <div class="brand">
+      <!-- Logo C: Facet (flat gem, reversed for the purple background) -->
+      <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,6 90,38 50,94 10,38" fill="#fff"/><polygon points="50,6 90,38 66,38" fill="#8FB2FF"/><path d="M10 38H90M34 38L50 94L66 38M34 38L50 6L66 38" fill="none" stroke="#4A2C9A" stroke-width="4" stroke-linejoin="round"/></svg>
+      <div><h1 class="word">SPLENDOUR</h1><p class="slogan">Trust first</p></div>
+    </div>
   </header>
 
-  <section class="ss-card">
-    <div id="pulseSwitch" class="ss-tabs" data-active="register">
-      <button type="button" class="pulse-switch-btn active" data-form="register">✨ Register</button>
-      <button type="button" class="pulse-switch-btn" data-form="login">🔑 Login</button>
-    </div>
+  <main class="main">
+    <h2 class="sr" id="modeTitle" aria-live="polite">Log in</h2>
+    <noscript><p class="err">Please enable JavaScript to log in or register.</p></noscript>
+    <form id="form" novalidate>
+      <input type="hidden" id="regReferral" name="referralCode">
+      <div class="f"><input id="user" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder=" " aria-describedby="user-e" required><label for="user" id="userLabel">Username or phone</label><p class="err" id="user-e"></p></div>
 
-    <form id="registerForm" class="pulse-form active" novalidate>
-      <div id="skyRefChip" class="ss-ref">🎁 <span id="skyRefText">No code used. Continue to register</span> 🔒</div>
-      <input type="hidden" id="regReferral"><input type="hidden" id="referralCode">
-      <label for="regUsername">👤 Username · letters only</label>
-      <input id="regUsername" class="pulse-input" type="text" autocomplete="username" placeholder="e.g. John">
-      <label for="regEmail">✉️ Email · optional</label>
-      <input id="regEmail" class="pulse-input" type="email" autocomplete="email" placeholder="you@email.com (optional)">
-      <div class="ss-row">
-        <div><label for="regPhone">📞 Phone · 07xxxxxxxx</label>
-          <input id="regPhone" class="pulse-input" type="tel" inputmode="numeric" maxlength="10" autocomplete="tel" placeholder="0771234567"></div>
-        <div><label for="regPin">🔒 Password · 4 numbers</label>
-          <div class="ss-pw"><input id="regPin" class="pulse-input" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••">
-          <button type="button" class="pulse-eye" data-target="regPin" aria-label="Show password">👁</button></div></div>
+      <div class="phone-wrap" id="rowPhone" hidden>
+        <div class="phone">
+          <button class="cc" id="cc" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Country code"><span id="ccText">UG +256</span><span aria-hidden="true">▾</span></button>
+          <div class="f"><input id="phone" name="phone" type="tel" inputmode="numeric" maxlength="13" autocomplete="tel-national" placeholder=" " aria-describedby="phone-e"><label for="phone">Phone number</label></div>
+        </div>
+        <ul class="list" id="ccList" role="listbox" aria-label="Country code" hidden></ul>
+        <p class="err" id="phone-e"></p>
       </div>
-      <p class="ss-error" id="regError" role="alert" hidden></p>
-      <button type="submit" class="pulse-submit">🚀 Create account</button>
-    </form>
 
-    <form id="loginForm" class="pulse-form" novalidate>
-      <label for="loginPhone">👤 Phone or username · the one you registered with</label>
-      <input id="loginPhone" class="pulse-input" type="text" autocomplete="username" placeholder="0771234567 or John">
-      <label for="loginPin">🔒 Password · 4 numbers</label>
-      <div class="ss-pw"><input id="loginPin" class="pulse-input" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="••••">
-      <button type="button" class="pulse-eye" data-target="loginPin" aria-label="Show password">👁</button></div>
-      <a href="#" class="ss-forgot" id="forgotLink">Forgot password?</a>
-      <p class="ss-error" id="loginError" role="alert" hidden></p>
-      <button type="submit" class="pulse-submit">➡️ Login</button>
-    </form>
+      <div class="f" id="rowEmail" hidden><input id="email" name="email" type="email" autocomplete="email" placeholder=" " aria-describedby="email-e"><label for="email">Email (optional)</label><p class="err" id="email-e"></p></div>
 
-    <div class="ss-social">
-      <a id="waBtn" class="wa" href="https://chat.whatsapp.com/KN55xnObYqDLyHJn9hXCyA?s=cl&p=a&iam=2" target="_blank" rel="noopener">WhatsApp</a>
-      <a id="tgBtn" class="tg" href="https://t.me/+h8TLIvkxL8M4Yjlk" target="_blank" rel="noopener">Telegram</a>
+      <div class="f pw"><input id="pass" name="password" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder=" " aria-describedby="pass-e" required><label for="pass">Password</label><button class="tog" id="tog" type="button" aria-pressed="false" aria-label="Show password">Show</button><p class="err" id="pass-e"></p></div>
+
+      <a class="forgot" id="forgot" href="#">Forgot password?</a>
+
+      <div class="btns">
+        <button class="btn" id="regBtn" type="button">REGISTER</button>
+        <button class="btn primary" id="loginBtn" type="submit">LOGIN</button>
+      </div>
+      <p class="status" id="status" role="status"></p>
+    </form>
+  </main>
+
+  <section class="groups" aria-label="Community groups">
+    <div class="div">Join our groups</div>
+    <div class="g">
+      <a href="#" id="wa" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 0 1-11.8 7L4 20l1.1-4A8 8 0 1 1 20 12z"/></svg>WhatsApp</a>
+      <a href="#" id="tg" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4L3 11.5l6 2.2 2.3 6.3 3.2-4 4.5 3.2z"/><path d="M9 13.7L21 4"/></svg>Telegram</a>
     </div>
   </section>
-</main>
-<script src="static/main.js"></script>
+
+  <footer class="foot">
+    <div class="r1"><a href="mailto:splendour2027@gmail.com">splendour2027@gmail.com</a><a href="tel:+256782570103">0782570103</a></div>
+    <div class="po" role="group" aria-label="PO Box addresses"><div><small>PO Box Kampala</small><b>12090</b></div><div><small>PO Box Nairobi</small><b>980870</b></div><div><small>PO Box Tanzania</small><b>7651231</b></div></div>
+    <p class="sc"><span>Kampala service centre:</span> Namasuba, Freedom City Building</p>
+  </footer>
+</div>
+
+<script src="static/main.js" defer></script>
 </body>
 </html>
