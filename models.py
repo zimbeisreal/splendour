@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import enum
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import UniqueConstraint, Index, event, Numeric, text, DateTime, func
+from sqlalchemy import UniqueConstraint, Index, event, Numeric, text, DateTime, func, CheckConstraint
 from extensions import db
 from werkzeug.security import check_password_hash, generate_password_hash
 from enum import Enum
