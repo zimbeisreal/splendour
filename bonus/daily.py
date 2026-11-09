@@ -415,7 +415,7 @@ class DailyBonusProcessor:
                 notification = Notification(
                     user_id=user_id,
                     message=(
-                        f"SKYLINE · Daily yield credited\n"
+                        f"splendour · Daily yield credited\n"
                         f"Amount:   UGX {amount:,.0f}\n"
                         f"Bucket:   {bucket}\n"
                         f"Status:   Credited"
@@ -607,7 +607,7 @@ class DailyBonusProcessor:
                 try:
                     if total_bonus > 0:
                         lines = [
-                            "SKYLINE · Daily yield posted",
+                            "splendour · Daily yield posted",
                             f"Amount:   UGX {float(total_bonus):,.0f}",
                         ]
                         if total_locked_bonus > 0:

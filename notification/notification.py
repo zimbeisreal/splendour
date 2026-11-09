@@ -86,7 +86,7 @@ def send_package_activation_notifications(user, package_obj):
         activation_notification = Notification(
             user_id=user.id,
       message=(
-    f"SKYLINE · Position opened\n"
+    f"splendour · Position opened\n"
     f"Package:  {package_obj.name}\n"
     f"Amount:   UGX {package_obj.amount:,.0f}\n"
     f"Yield:    UGX {daily_bonus_amount:,.0f}/day\n"
@@ -102,7 +102,7 @@ def send_package_activation_notifications(user, package_obj):
         first_bonus_notification = Notification(
             user_id=user.id,
          message=(
-    f"SKYLINE :     Daily yield credited\n"
+    f"splendour :     Daily yield credited\n"
     f"Amount:   UGX {daily_bonus_amount:,.0f}\n"
     f"Source:   {package_obj.name}\n"
     f"Status:   Maturing · releases in 24h"
@@ -125,8 +125,8 @@ def send_package_activation_notifications(user, package_obj):
 """
 splendour_notifications.py - Splendour wording for general notifications.
 
-Replaces the old Skyline helper `send_package_activation_notifications`, which
-hard-coded a 5% daily yield, said "SKYLINE", and claimed a daily bonus was
+Replaces the old splendour helper `send_package_activation_notifications`, which
+hard-coded a 5% daily yield, said "splendour", and claimed a daily bonus was
 credited at purchase. At Splendour the first profit arrives after 24 hours and
 lock plans earn no daily profit.
 

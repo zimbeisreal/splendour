@@ -1,5 +1,5 @@
 """
-Create all tables from SKYLINE models, working around circular FKs.
+Create all tables from splendour models, working around circular FKs.
 
 Strategy:
 1. Import the app and db so all models are registered.

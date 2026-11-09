@@ -416,7 +416,7 @@ def credit_welcome_bonus_if_first_purchase(user: User, payment=None) -> tuple[bo
         notification = Notification(
             user_id=user.id,
          message=(
-    f"SKYLINE · Welcome bonus credited\n"
+    f"splendour · Welcome bonus credited\n"
     f"Amount:   UGX {amount:,.0f}\n"
     f"Reason:   First position opened\n"
     f"Status:   Available"

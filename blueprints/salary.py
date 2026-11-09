@@ -53,7 +53,7 @@ from sqlalchemy import UniqueConstraint, and_, case, func
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
-from models import Notification, Package, Transaction, User, Wallet
+from models import Notification, Package, Transaction, User, Wallet, SalaryPayout
 
 logger = logging.getLogger(__name__)
 salary_bp = Blueprint("salary_api", __name__, url_prefix="/api/salary")
@@ -177,20 +177,6 @@ def compute_state(active_referrals, direct_investment, first_earned_at, paid_key
 # =====================================================================
 # 2. LEDGER MODEL
 # =====================================================================
-class SalaryPayout(db.Model):
-    __tablename__ = "salary_payouts"
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    kind = db.Column(db.String(20), nullable=False)          # 'monthly' | 'group'
-    period_key = db.Column(db.String(40), nullable=False)    # 'month-0', 'group-2'
-    amount = db.Column(db.Numeric(18, 2), nullable=False)
-    transaction_id = db.Column(db.Integer, db.ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True)
-    snapshot = db.Column(db.JSON, default={})                # numbers at payout time (audit)
-    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
-
-    __table_args__ = (UniqueConstraint("user_id", "kind", "period_key", name="uq_salary_payout_period"),)
-
 
 # =====================================================================
 # 3. AUTH + QUERIES

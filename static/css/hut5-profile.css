@@ -1,12 +1,12 @@
 /* ============================================================
-   SKYLINE · PROFILE — PRIMARY STYLESHEET
+   splendour · PROFILE — PRIMARY STYLESHEET
    Deep navy · Cyan accent · Glass surfaces
    Single source of truth for all sky-* tokens.
    Every .express-* and .h5-* selector preserved for JS.
    ============================================================ */
 
 /* ============================================================
-   0. SKYLINE TOKEN SYSTEM
+   0. splendour TOKEN SYSTEM
    ============================================================ */
 :root {
   /* ---- Core palette (matches inline <style>) ---- */
@@ -55,7 +55,7 @@
   /* ============================================================
      ALIAS LAYER — keep legacy tokens resolvable.
      Every --h5-* / --express-* used by the JS or by leftover
-     selectors maps back to a Skyline value so nothing breaks.
+     selectors maps back to a splendour value so nothing breaks.
      ============================================================ */
 
   /* ---- h5-* aliases ---- */

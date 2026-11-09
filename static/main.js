@@ -1,4 +1,4 @@
-/* Splendour auth. API contract is identical to the Skyline backend:
+/* Splendour auth. API contract is identical to the splendour backend:
    POST /api/login   { email_or_phone: string, password: string(4 digits) }
    POST /api/signup  { username: letters, phone: "07XXXXXXXX", pin: string(4 digits), referralCode: string|null, email?: string }
    Same-origin, JSON, session cookie (credentials: include). No tokens or passwords are stored or logged. */
@@ -102,8 +102,8 @@
     if (res.ok) {
       const role = data.role || (data.user && (data.user.role || data.user.user_role)) || 'user';
       try { /* keys read by the post-login pages */
-        sessionStorage.setItem('skyline_just_logged_in', 'true');
-        localStorage.setItem('skyline_welcome_seen', 'false');
+        sessionStorage.setItem('splendour_just_logged_in', 'true');
+        localStorage.setItem('splendour_welcome_seen', 'false');
         localStorage.setItem('userRole', role);
         if (data.user) localStorage.setItem('userData', JSON.stringify(data.user));
       } catch (_) { /* storage unavailable */ }

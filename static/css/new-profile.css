@@ -1,21 +1,21 @@
 /* ============================================================
-   SKYLINE · NEW-PROFILE — COMPATIBILITY LAYER
+   splendour · NEW-PROFILE — COMPATIBILITY LAYER
    This file used to redefine the whole design system
    (indigo + Arsenal red). It now provides:
      1. Legacy alias tokens (already declared in
-        skyline-profile.css but kept here as a fallback).
+        splendour-profile.css but kept here as a fallback).
      2. A few legacy component shims used by older markup.
    Do NOT redefine --sky-* here — those belong to
-   skyline-profile.css only.
+   splendour-profile.css only.
    ============================================================ */
 
 /* ============================================================
    1. LEGACY ALIASES (fallback — no redefinition)
    Any selector that still references --express-* or --h5-*
-   resolves through these aliases to Skyline tokens.
+   resolves through these aliases to splendour tokens.
    ============================================================ */
 :root {
-  /* express-* fallbacks — resolve via skyline-profile.css */
+  /* express-* fallbacks — resolve via splendour-profile.css */
   --express-bg:            transparent;
   --express-surface:       rgba(255, 255, 255, 0.04);
   --express-card:          rgba(255, 255, 255, 0.04);
@@ -54,7 +54,7 @@
 /* ============================================================
    2. BASE SHIMS — only if the primary stylesheet has not
    loaded yet (e.g. hot-reload during dev). These are safe
-   declarations that match Skyline tokens.
+   declarations that match splendour tokens.
    ============================================================ */
 html, body {
   background: transparent;
@@ -64,7 +64,7 @@ html, body {
 
 /* ============================================================
    3. GROUP MODAL SHIM — the buy-package flow uses a
-   non-express modal class that needs Skyline colors so it
+   non-express modal class that needs splendour colors so it
    doesn't fall back to browser defaults.
    ============================================================ */
 .group-modal-overlay {
@@ -93,7 +93,7 @@ html, body {
 /* ============================================================
    4. LEGACY TRANSPARENT-LIST SHIMS
    Older markup sometimes wraps quick-rows in a container
-   that assumes a card. Neutralize that so the Skyline
+   that assumes a card. Neutralize that so the splendour
    per-row cards render correctly.
    ============================================================ */
 .network-stats,
@@ -110,7 +110,7 @@ html, body {
 
 /* ============================================================
    5. LEGACY "hero" BANNER (old markup) — hide if present
-   The new Skyline profile uses .express-balance-card.total
+   The new splendour profile uses .express-balance-card.total
    as the hero. If an old .express-hero exists, keep it out
    of the layout entirely.
    ============================================================ */
@@ -122,8 +122,8 @@ html, body {
 
 /* ============================================================
    6. NO REDEFINITION OF SKY-* TOKENS
-   Do not redeclare --sky-* here. All Skyline tokens live in
-   skyline-profile.css (previously SKYLINE-profile.css) only.
+   Do not redeclare --sky-* here. All splendour tokens live in
+   splendour-profile.css (previously splendour-profile.css) only.
    This file is a fallback + shim layer.
    ============================================================ */
 

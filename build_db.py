@@ -1,4 +1,4 @@
-﻿"""Create all tables from SKYLINE models, handling custom ENUMs and circular FKs."""
+﻿"""Create all tables from splendour models, handling custom ENUMs and circular FKs."""
 import sys
 from app import app, db
 
