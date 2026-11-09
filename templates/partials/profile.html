@@ -1,15 +1,288 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8">
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- If the API is on another origin, add it to connect-src -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>S&amp;S Group</title><link rel="stylesheet" href="static/css/profile.css"></head>
+<meta name="color-scheme" content="light dark">
+<title>Splendour | Wallet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="static/css/profile.css">
+</head>
 <body>
-<header class="top"><div class="logo">S&amp;S</div><b id="hello">Hi</b><button id="logoutBtn" aria-label="Logout">🚪 Logout</button></header>
-<main id="view"></main>
-<nav class="nav" id="nav">
-<button data-tab="daily" class="on">📈<span>Daily</span></button>
-<button data-tab="fixed">💎<span>Fixed</span></button>
-<button data-tab="account">👤<span>Account</span></button>
-<button data-tab="network">🌐<span>Network</span></button></nav>
-<div id="wrap" class="wrap" hidden><div class="sheet" id="sheet"></div></div>
-<div id="toast" class="toast" hidden></div>
-<script src="static/js/profile.js"></script></body></html>
+<div class="app">
+  <header class="top">
+    <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,6 90,38 50,94 10,38" fill="#fff"/><polygon points="50,6 90,38 66,38" fill="#8FB2FF"/><path d="M10 38H90M34 38L50 94L66 38M34 38L50 6L66 38" fill="none" stroke="#4A2C9A" stroke-width="4" stroke-linejoin="round"/></svg>
+    <p class="word">SPLENDOUR</p>
+  </header>
+
+  <main id="main">
+    <noscript><p class="err">Please enable JavaScript to use your account.</p></noscript>
+    <div class="banner" id="banner" role="alert" hidden><span id="bannerText"></span> <button class="link" id="retry" type="button">Try again</button></div>
+
+    <!-- WALLET -->
+    <section id="v-wallet" data-view aria-labelledby="h-wallet">
+      <h2 class="sr" id="h-wallet" tabindex="-1">Wallet</h2>
+      <div class="card">
+        <p class="hint">Total available balance</p>
+        <p class="amount" data-k="available">—</p>
+        <p class="hint">Actual balance + wallet balance + welcome bonus.</p>
+      </div>
+      <div class="btns"><a class="btn primary" href="#deposit">DEPOSIT</a><button class="btn" id="openWd" type="button">WITHDRAW</button></div>
+      <p class="hint c">Deposit first, then invest. Withdraw any time.</p>
+      <a class="invest" href="#daily"><span>Invest now<span class="hint">Choose a daily plan and start earning</span></span><span aria-hidden="true">›</span></a>
+      <div class="card" id="startCard" hidden>
+        <h3>Get started</h3>
+        <ul class="checks">
+          <li data-step="1">Deposit money (minimum UGX 20,000)</li>
+          <li data-step="2">Pick a plan and invest</li>
+          <li data-step="3">Earn profit every day</li>
+          <li data-step="4">Withdraw to your phone</li>
+        </ul>
+      </div>
+      <div id="stats"></div>
+    </section>
+
+    <!-- DEPOSIT -->
+    <section id="v-deposit" data-view hidden aria-labelledby="h-deposit">
+      <a class="back" href="#wallet">‹ Wallet</a>
+      <h2 id="h-deposit" tabindex="-1">Deposit</h2>
+      <p class="hint">Deposit first, then invest. Minimum deposit is UGX 20,000.</p>
+      <div class="seg" role="tablist" aria-label="Deposit method">
+        <button id="tIn" role="tab" aria-selected="true" aria-controls="pIn" type="button">Instant</button>
+        <button id="tMan" role="tab" aria-selected="false" aria-controls="pMan" type="button" tabindex="-1">Manual</button>
+      </div>
+
+      <div id="pIn" role="tabpanel" aria-labelledby="tIn">
+        <div id="inForm">
+          <ol class="how">
+            <li><span>Enter your mobile money number and amount<small>The number you will pay from.</small></span></li>
+            <li><span>Tap Confirm deposit<small>We send a payment prompt to your phone.</small></span></li>
+            <li><span>Approve on your phone<small>Enter your mobile money PIN.</small></span></li>
+            <li><span>Your balance updates<small>Then pick a plan in Daily or Lock.</small></span></li>
+          </ol>
+          <form id="depForm" novalidate>
+            <div class="f"><input id="dPhone" type="tel" inputmode="numeric" maxlength="10" autocomplete="tel-national" placeholder=" " aria-describedby="dPhone-e"><label for="dPhone">Mobile money number (07…)</label><p class="err" id="dPhone-e"></p></div>
+            <div class="f"><input id="dAmt" type="text" inputmode="numeric" maxlength="9" placeholder=" " aria-describedby="dAmt-e dAmt-h"><label for="dAmt">Amount (UGX)</label><p class="err" id="dAmt-e"></p></div>
+            <p class="hint" id="dAmt-h">Minimum deposit UGX 20,000.</p>
+            <p class="err" id="dErr" role="alert"></p>
+            <button class="btn primary one" id="dBtn" type="submit">CONFIRM DEPOSIT</button>
+          </form>
+        </div>
+        <div id="inWait" class="card" hidden>
+          <h3>Check your phone</h3>
+          <p id="waitMsg"></p>
+          <p class="cnt" id="cd" role="timer" aria-live="off">5:00</p>
+          <ul class="checks"><li class="done">Request sent</li><li id="wApp">Approved on your phone</li><li id="wBal">Balance updated</li></ul>
+          <p class="hint">We check automatically. Keep this screen open for up to 5 minutes.</p>
+          <button class="btn one" id="waitClose" type="button">CLOSE</button>
+        </div>
+        <div id="inRes" class="card" hidden>
+          <h3 id="resT"></h3><p id="resB"></p>
+          <button class="btn primary one" id="resP" type="button"></button>
+          <button class="btn one" id="resS" type="button">BACK TO WALLET</button>
+        </div>
+      </div>
+
+      <div id="pMan" role="tabpanel" aria-labelledby="tMan" hidden>
+        <ol class="how">
+          <li><span>Send mobile money to this number<small>Minimum UGX 20,000.</small></span></li>
+          <li><span>We confirm your payment<small>Our team matches your phone number and checks with an admin before adding the money. This takes longer than an instant deposit.</small></span></li>
+          <li><span>Your balance updates<small>You get a notification. Then pick a plan.</small></span></li>
+        </ol>
+        <div class="copybox"><div><b id="coNum">0789789789</b><span class="hint">Splendour U Ltd</span></div><button class="btn small" id="copyBtn" type="button">COPY</button></div>
+        <p class="hint">Send from the phone number on your account so we can match your payment.</p>
+      </div>
+    </section>
+
+    <!-- Next screens (built in the next step) -->
+    <section id="v-daily" data-view hidden aria-labelledby="h-daily">
+      <h2 id="h-daily" tabindex="-1">Daily earnings</h2>
+      <p class="hint">Every plan earns 0.03% a day for 26 days. Your invested amount comes back on day 26.</p>
+      <p class="row balline"><span>Your balance</span><b data-k="available">—</b></p>
+      <div class="card" id="needDep" hidden><h3>Deposit first</h3><p class="hint">You need at least UGX 20,000 in your balance before you can invest.</p><a class="btn primary one" href="#deposit">DEPOSIT</a></div>
+      <div id="plans"></div>
+    </section>
+    <section id="v-lock" data-view hidden aria-labelledby="h-lock">
+      <h2 id="h-lock" tabindex="-1">Lock products</h2>
+      <p class="hint">Lock an amount for a fixed time. When the time ends, you get your amount back plus the profit.</p>
+      <p class="row balline"><span>Your balance</span><b data-k="available">—</b></p>
+      <div class="card" id="needDepLock" hidden><h3>Deposit first</h3><p class="hint">You need at least UGX 50,000 in your balance before you can lock an amount.</p><a class="btn primary one" href="#deposit">DEPOSIT</a></div>
+      <div id="lockPlans"></div>
+    </section>
+    <!-- TEAM: referrals + salary -->
+    <section id="v-team" data-view hidden aria-labelledby="h-team">
+      <h2 id="h-team" tabindex="-1">Team</h2>
+      <p class="hint">Invite friends. When they invest, you earn a monthly salary and team bonuses.</p>
+      <div class="banner" id="tmBanner" role="alert" hidden><span id="tmBannerText"></span> <button class="link" id="tmRetry" type="button">Try again</button></div>
+
+      <div class="card">
+        <h3>Your invite link</h3>
+        <p class="hint">Share this link. Friends who sign up with it join your team.</p>
+        <div class="copybox"><b class="lk" id="tmLink">Loading…</b></div>
+        <div class="btns"><button class="btn primary" id="tmCopy" type="button" disabled>COPY LINK</button><button class="btn" id="tmShare" type="button" disabled>SHARE</button></div>
+      </div>
+
+      <div class="card">
+        <div class="row"><h3>Monthly salary</h3><b id="msAmt">—</b></div>
+        <p class="hint" id="msHint">Loading…</p>
+        <div class="bar" id="msBarWrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="msLbl"><i id="msBar"></i></div>
+        <p class="row"><span id="msLbl">—</span><b id="msPct">0%</b></p>
+        <div class="sum" id="msInfo" hidden>
+          <p class="row"><span>Next salary</span><b id="msNext">—</b></p>
+          <p class="row"><span>Salary paid so far</span><b id="msPaid">—</b></p>
+        </div>
+        <p class="hint">Only friends you invited yourself count, not their friends. Your progress never goes down, even after their plans end.</p>
+      </div>
+
+      <div class="card">
+        <div class="row"><h3>Team bonus</h3><b id="tbAmt">—</b></div>
+        <p class="hint" id="tbHint">Loading…</p>
+        <ol class="steps3" id="tbSteps" aria-label="Friends counted toward your next bonus"><li>1</li><li>2</li><li>3</li></ol>
+        <p class="row"><span id="tbLbl">—</span></p>
+        <div class="sum">
+          <p class="row"><span>Bonuses earned</span><b id="tbGroups">—</b></p>
+          <p class="row"><span>Bonus paid so far</span><b id="tbPaid">—</b></p>
+        </div>
+        <p class="hint">Every 3 friends who invest earn one bonus, paid once. Then the count starts again from 0.</p>
+      </div>
+
+      <div class="card">
+        <div class="row"><h3>Paid to you</h3><b id="tpAll">—</b></div>
+        <p class="row"><span class="hint">Paid this month</span><b id="tpMonth">—</b></p>
+        <p class="hint">Salary and bonuses are added to your balance automatically. You do not need to claim them.</p>
+      </div>
+
+      <div class="card">
+        <h3>How it works</h3>
+        <ol class="how">
+          <li><span>Invite friends<small>Share your link. They sign up and deposit.</small></span></li>
+          <li><span>They invest<small>A friend becomes Active after buying their first plan, and stays Active for good.</small></span></li>
+          <li><span>You get paid<small>Every 3 active friends gives a bonus. Their investments together reaching UGX 250,000 gives a monthly salary.</small></span></li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3>Your friends</h3>
+        <p class="hint">People who joined with your link. Active means they have bought a plan.</p>
+        <div id="tmList"></div>
+        <p class="hint c" id="tmEmpty" hidden>No friends yet. Share your invite link to get started.</p>
+      </div>
+    </section>
+    <!-- PROFILE: account, messages, active plans -->
+    <section id="v-profile" data-view hidden aria-labelledby="h-profile">
+      <h2 id="h-profile" tabindex="-1">Profile</h2>
+      <p class="hint">Your account details, messages from Splendour and your active plans.</p>
+      <div class="card">
+        <div class="who"><span class="av" id="pfAv" aria-hidden="true">?</span><div><h3 id="pfName">—</h3><p class="hint">Your Splendour account</p></div></div>
+        <div class="sum first">
+          <p class="row"><span>Phone</span><b id="pfPhone">—</b></p>
+          <p class="row"><span>Email</span><b id="pfEmail">—</b></p>
+          <p class="row"><span>Member since</span><b id="pfSince">—</b></p>
+          <p class="row"><span>Invite code</span><b id="pfCode">—</b></p>
+          <p class="row"><span>Account status</span><b id="pfVer">—</b></p>
+        </div>
+        <p class="hint" id="pfVerHint"></p>
+      </div>
+      <div class="card">
+        <div class="row"><h3>Messages</h3><b class="hint" id="pfUnread"></b></div>
+        <p class="hint">Updates about your deposits, plans, withdrawals and salary. Tap a new message to mark it as read.</p>
+        <div id="pfNotes"></div>
+        <p class="hint c" id="pfNoNotes" hidden>No messages yet. You will see updates here when something happens on your account.</p>
+        <p class="hint c" id="pfNoteErr" hidden>We could not load your messages. <button class="link" id="pfNoteRetry" type="button">Try again</button></p>
+      </div>
+      <div class="card">
+        <h3>Active plans</h3>
+        <p class="hint">Plans that are earning now. Finished plans are not listed here.</p>
+        <div id="pfPlans"></div>
+        <p class="hint c" id="pfNoPlans" hidden>You have no active plans. <a class="link" href="#daily">Choose a plan</a> to start earning.</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs" aria-label="Main">
+    <a href="#wallet" data-nav="wallet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 7l12-3v3M17 14h2"/></svg>Wallet</a>
+    <a href="#daily" data-nav="daily"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg>Daily</a>
+    <a href="#lock" data-nav="lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Lock</a>
+    <a href="#team" data-nav="team"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.300 2.700-6 6-6s6 2.700 6 6M17 5a3 3 0 0 1 0 6M21 20c0-2.500-1.500-4.500-4-5.500"/></svg>Team</a>
+    <a href="#profile" data-nav="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.600-7 8-7s8 3 8 7"/></svg>Profile<span class="dot" id="navDot" hidden></span></a>
+  </nav>
+</div>
+
+<!-- WITHDRAW SHEET -->
+<dialog id="wd" aria-labelledby="wdT">
+  <div class="sheet">
+    <div class="grab"></div>
+    <h2 id="wdT">Withdraw <button class="x" id="wdX" type="button" aria-label="Close">✕</button></h2>
+    <div id="wdForm">
+      <p class="hint">Enter the number to be paid and the amount. We take a 5% fee and send the rest to that number.</p>
+      <p class="row"><span>Available balance</span><b data-k="available">—</b></p>
+      <form id="wForm" novalidate>
+        <div class="f"><input id="wPhone" type="tel" inputmode="numeric" maxlength="10" placeholder=" " aria-describedby="wPhone-e"><label for="wPhone">Send to: mobile money number (07…)</label><p class="err" id="wPhone-e"></p></div>
+        <div class="f"><input id="wAmt" type="text" inputmode="numeric" maxlength="9" placeholder=" " aria-describedby="wAmt-e wAmt-h"><label for="wAmt">Amount (UGX)</label><p class="err" id="wAmt-e"></p></div>
+        <p class="hint" id="wAmt-h">Minimum withdrawal UGX 3,000.</p>
+        <div class="sum" aria-live="polite">
+          <p class="row"><span>Withdraw amount</span><b id="pA">—</b></p>
+          <p class="row"><span>Fee (5%)</span><b id="pF">—</b></p>
+          <p class="row net"><span>You receive</span><b id="pN">—</b></p>
+        </div>
+        <p class="hint">Paid out instantly and automatically. The final amount is confirmed by us.</p>
+        <p class="err" id="wErr" role="alert"></p>
+        <button class="btn primary one" id="wBtn" type="submit">WITHDRAW</button>
+      </form>
+    </div>
+    <div id="wdRes" hidden>
+      <h3 id="wrT"></h3><p id="wrB"></p>
+      <button class="btn primary one" id="wrOk" type="button">DONE</button>
+    </div>
+  </div>
+</dialog>
+<!-- DEPOSIT FIRST SHEET -->
+<dialog id="df" aria-labelledby="dfT">
+  <div class="sheet">
+    <div class="grab"></div>
+    <h2 id="dfT">Deposit first <button class="x" id="dfX" type="button" aria-label="Close">✕</button></h2>
+    <p id="dfMsg"></p>
+    <div class="sum first">
+      <p class="row"><span>Plan amount</span><b id="dfA">—</b></p>
+      <p class="row"><span>Your balance</span><b id="dfB">—</b></p>
+      <p class="row net"><span>You still need</span><b id="dfN">—</b></p>
+    </div>
+    <p class="hint">Deposit, then come back to invest. Minimum deposit is UGX 20,000.</p>
+    <div class="btns"><a class="btn primary" id="dfGo" href="#deposit">DEPOSIT NOW</a><button class="btn" id="dfCancel" type="button">CANCEL</button></div>
+  </div>
+</dialog>
+<!-- INVEST CONFIRM SHEET -->
+<dialog id="iv" aria-labelledby="ivT">
+  <div class="sheet">
+    <div class="grab"></div>
+    <h2 id="ivT">Invest <button class="x" id="ivX" type="button" aria-label="Close">✕</button></h2>
+    <div id="ivForm">
+      <div class="sum first">
+        <p class="row"><span>Amount</span><b id="ivA">—</b></p>
+        <p class="row"><span>Balance after</span><b id="ivBal">—</b></p>
+      </div>
+      <div class="sum">
+        <p class="row" id="ivDRow"><span>Daily profit</span><b id="ivD">—</b></p>
+        <p class="row"><span>Duration</span><b id="ivDur">26 days</b></p>
+        <p class="row"><span>Total profit</span><b id="ivP">—</b></p>
+      </div>
+      <div class="sum"><p class="row net"><span>You get back</span><b id="ivT2">—</b></p></div>
+      <p class="hint" id="ivHint"></p>
+      <p class="err" id="ivErr" role="alert"></p>
+      <button class="btn primary one" id="ivBtn" type="button">CONFIRM INVESTMENT</button>
+    </div>
+    <div id="ivRes" hidden>
+      <h3 id="irT"></h3><p id="irB"></p>
+      <button class="btn primary one" id="irOk" type="button">DONE</button>
+    </div>
+  </div>
+</dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="static/js/catalog.js" defer></script>
+<script src="static/js/profile.js" defer></script>
+</body>
+</html>

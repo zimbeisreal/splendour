@@ -1059,6 +1059,43 @@ class Notification(db.Model):
             'is_read': self.is_read,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+class SalaryPayout(db.Model):
+    """
+    Ledger of every salary payment already made (monthly salary and team bonus).
+    One row = one payment. The UNIQUE constraint makes a double payment impossible.
+    Rows are never updated or deleted.
+    """
+    __tablename__ = 'salary_payouts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False)            # 'monthly' | 'group'
+    period_key = db.Column(db.String(40), nullable=False)      # 'month-0', 'month-1', 'group-1', 'group-2'
+    amount = db.Column(db.Numeric(18, 2), nullable=False)
+    transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id', ondelete='SET NULL'), nullable=True)
+    snapshot = db.Column(db.JSON, default={})                  # numbers at payout time, for audit
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    user = db.relationship('User', backref=db.backref('salary_payouts', lazy='dynamic'))
+    transaction = db.relationship('Transaction', foreign_keys=[transaction_id])
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'kind', 'period_key', name='uq_salary_payout_period'),
+        CheckConstraint("kind IN ('monthly', 'group')", name='ck_salary_payout_kind'),
+        CheckConstraint('amount > 0', name='ck_salary_payout_amount'),
+        Index('idx_salary_payout_user_created', 'user_id', 'created_at'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'kind': self.kind,
+            'period_key': self.period_key,
+            'amount': float(self.amount or 0),
+            'transaction_id': self.transaction_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
 #=================================================================================================
 
 class BillUtility(db.Model):

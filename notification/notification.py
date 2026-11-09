@@ -119,3 +119,66 @@ def send_package_activation_notifications(user, package_obj):
     except Exception as e:
         current_app.logger.error(f"Failed to send package activation notifications: {e}")
         return False
+
+
+
+"""
+splendour_notifications.py - Splendour wording for general notifications.
+
+Replaces the old Skyline helper `send_package_activation_notifications`, which
+hard-coded a 5% daily yield, said "SKYLINE", and claimed a daily bonus was
+credited at purchase. At Splendour the first profit arrives after 24 hours and
+lock plans earn no daily profit.
+
+All helpers only db.session.add(); the CALLER commits, so a notification is
+saved or lost together with the money movement it describes.
+Message column is String(500): every message here stays well under that.
+Messages are plain text: first line = title, other lines = details.
+"""
+from datetime import timedelta
+
+from extensions import db
+from models import Notification
+
+
+def _ugx(n):
+    return f"UGX {float(n):,.0f}"
+
+
+def add_notification(user_id, message, ntype="general"):
+    n = Notification(user_id=user_id, message=message[:500], notification_type=ntype, is_read=False)
+    db.session.add(n)
+    return n
+
+
+def notify_package_activated(user, catalog, lock_end_date=None):
+    """catalog = the PackageCatalog row that was bought."""
+    f = catalog.features or {}
+    name = catalog.display_name or catalog.name
+    if catalog.is_locking_package:
+        days = catalog.duration_days
+        lines = [f"Lock plan started: {name}",
+                 f"Locked: {_ugx(catalog.amount)} for {days} days",
+                 f"You receive: {_ugx(f.get('total_returns', 0))}"]
+        if lock_end_date:
+            lines.append(f"Available on: {lock_end_date.strftime('%d %b %Y')}")
+        lines.append("Your money is safe and cannot be withdrawn until then.")
+        return add_notification(user.id, "\n".join(lines), "package_activation")
+    lines = [f"Plan started: {name}",
+             f"Invested: {_ugx(catalog.amount)}",
+             f"Earns: {_ugx(f.get('daily_profit', 0))} a day for {catalog.duration_days} days",
+             "First profit: after 24 hours",
+             f"Your {_ugx(catalog.amount)} returns on day {catalog.duration_days}."]
+    return add_notification(user.id, "\n".join(lines), "package_activation")
+
+
+def notify_salary(user_id, kind, amount, active_referrals=None):
+    if kind == "monthly":
+        msg = (f"Monthly salary paid: {_ugx(amount)}\n"
+               "Your friends' investments reached the salary target.\n"
+               "It was added to your balance. Next salary in 30 days.")
+    else:
+        msg = (f"Team bonus paid: {_ugx(amount)}\n"
+               "3 more of your friends have invested.\n"
+               "It was added to your balance. The next group starts from 0.")
+    return add_notification(user_id, msg, "salary")

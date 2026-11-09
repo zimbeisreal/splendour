@@ -19,6 +19,7 @@ from flask_cors import CORS
 import sentry_sdk
 from sentry_sdk.integrations.flask import FlaskIntegration
 from flask_caching import Cache
+from blueprints.salary import init_app as init_salary
 
 migrate = Migrate()
 
@@ -27,6 +28,7 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config) 
     app = init_extensions(app)
+    #app = init_salary(app)
     migrate.init_app(app, db)
 
 
@@ -140,6 +142,7 @@ def create_app():
         from notification.notification import notification_bp
         from network.network_routes import network_bp
         from blueprints.rewards import bp as rewards_bp
+        from blueprints.salary import salary_bp
         #from services.bills_routes import bill_bp
         #from sub_admin import subadmin_bp
         app.register_blueprint(rewards_bp)
@@ -151,7 +154,7 @@ def create_app():
         app.register_blueprint(activity_bp)
         app.register_blueprint(notification_bp)
         app.register_blueprint(network_bp)
-       # app.register_blueprint(bill_bp)
+        app.register_blueprint(salary_bp)
         #app.register_blueprint(subadmin_bp)
      
     register_blueprints(app)

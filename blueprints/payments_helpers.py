@@ -14,157 +14,11 @@ LIVEPAY_BASE_URL = os.getenv('LIVEPAY_BASE_URL', 'https://livepay.me/api')
 
 
 
-express_PACKAGE_CATALOG = {
-    # ── DAILY EARNINGS (1% per month, 30 days, total_returns = capital + profit) ──
-    "daily_20000": {
-        "name": "Daily Earnings 20K",
-        "display_name": "Daily Earnings 20K",
-        "amount": 20000,
-        "bonus_percentage": 1.0,
-        "duration_days": 30,
-        "reward_description": "Invest UGX 20,000. Earn UGX 200 per month (1%). Total after 1 month: UGX 20,200.",
-        "features": {
-            "daily_profit": 6.67, "total_profit": 200, "total_returns": 20200,
-            "capital": 20000, "daily_rate": 0.0333, "total_rate": 1.0,
-            "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "daily",
-        "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
-    },
-    "daily_50000": {
-        "name": "Daily Earnings 50K",
-        "display_name": "Daily Earnings 50K",
-        "amount": 50000,
-        "bonus_percentage": 1.0,
-        "duration_days": 30,
-        "reward_description": "Invest UGX 50,000. Earn UGX 500 per month (1%). Total after 1 month: UGX 50,500.",
-        "features": {
-            "daily_profit": 16.67, "total_profit": 500, "total_returns": 50500,
-            "capital": 50000, "daily_rate": 0.0333, "total_rate": 1.0,
-            "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "daily",
-        "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
-    },
-    "daily_100000": {
-        "name": "Daily Earnings 100K",
-        "display_name": "Daily Earnings 100K",
-        "amount": 100000,
-        "bonus_percentage": 1.0,
-        "duration_days": 30,
-        "reward_description": "Invest UGX 100,000. Earn UGX 1,000 per month (1%). Total after 1 month: UGX 101,000.",
-        "features": {
-            "daily_profit": 33.33, "total_profit": 1000, "total_returns": 101000,
-            "capital": 100000, "daily_rate": 0.0333, "total_rate": 1.0,
-            "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "daily",
-        "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
-    },
-    "daily_200000": {
-        "name": "Daily Earnings 200K",
-        "display_name": "Daily Earnings 200K",
-        "amount": 200000,
-        "bonus_percentage": 1.0,
-        "duration_days": 30,
-        "reward_description": "Invest UGX 200,000. Earn UGX 2,000 per month (1%). Total after 1 month: UGX 202,000.",
-        "features": {
-            "daily_profit": 66.67, "total_profit": 2000, "total_returns": 202000,
-            "capital": 200000, "daily_rate": 0.0333, "total_rate": 1.0,
-            "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "daily",
-        "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
-    },
-    "daily_500000": {
-        "name": "Daily Earnings 500K",
-        "display_name": "Daily Earnings 500K",
-        "amount": 500000,
-        "bonus_percentage": 1.0,
-        "duration_days": 30,
-        "reward_description": "Invest UGX 500,000. Earn UGX 5,000 per month (1%). Total after 1 month: UGX 505,000.",
-        "features": {
-            "daily_profit": 166.67, "total_profit": 5000, "total_returns": 505000,
-            "capital": 500000, "daily_rate": 0.0333, "total_rate": 1.0,
-            "referral_bonus": 0, "support_level": "Daily", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": False, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "daily",
-        "lock_minimum_days": 0, "lock_maximum_days": 0, "lock_bonus_tiers": {},
-    },
-
-    # ── FIXED 3 MONTHS (3.5%, total_returns = capital + profit) ──
-    "fixed_50000_3": {
-        "name": "Fixed 3-Days 50K",
-        "display_name": "Fixed 3-Month 50K",
-        "amount": 50000,
-        "bonus_percentage": 3.5,
-        "duration_days": 90,
-        "reward_description": "Lock UGX 50,000 for 3 months at 3.5%. Total return: UGX 51,750.",
-        "features": {
-            "daily_profit": 0, "total_profit": 1750, "total_returns": 51750,
-            "capital": 50000, "daily_rate": 0.0, "total_rate": 3.5,
-            "referral_bonus": 0, "support_level": "3-Month", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 3, "lock_maximum_days": 3, "lock_bonus_tiers": {},
-    },
-    "fixed_100000_3": {
-        "name": "Fixed 3-Days 100K",
-        "display_name": "Fixed 3-Month 100K",
-        "amount": 100000,
-        "bonus_percentage": 3.5,
-        "duration_days": 90,
-        "reward_description": "Lock UGX 100,000 for 3 months at 3.5%. Total return: UGX 103,500.",
-        "features": {
-            "daily_profit": 0, "total_profit": 3500, "total_returns": 103500,
-            "capital": 100000, "daily_rate": 0.0, "total_rate": 3.5,
-            "referral_bonus": 0, "support_level": "3-Month", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 3, "lock_maximum_days": 3, "lock_bonus_tiers": {},
-    },
-
-    # ── FIXED 6 MONTHS (4%, total_returns = capital + profit) ──
-    "fixed_160000_6": {
-        "name": "Fixed 6-Days 160K",
-        "display_name": "Fixed 6-Month 160K",
-        "amount": 160000,
-        "bonus_percentage": 4.0,
-        "duration_days": 180,
-        "reward_description": "Lock UGX 160,000 for 6 months at 4%. Total return: UGX 166,400.",
-        "features": {
-            "daily_profit": 0, "total_profit": 6400, "total_returns": 166400,
-            "capital": 160000, "daily_rate": 0.0, "total_rate": 4.0,
-            "referral_bonus": 0, "support_level": "6-Month", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 6, "lock_maximum_days": 6, "lock_bonus_tiers": {},
-    },
-    "fixed_300000_6": {
-        "name": "Fixed 6-Days 300K",
-        "display_name": "Fixed 6-Month 300K",
-        "amount": 300000,
-        "bonus_percentage": 4.0,
-        "duration_days": 180,
-        "reward_description": "Lock UGX 300,000 for 6 months at 4%. Total return: UGX 312,000.",
-        "features": {
-            "daily_profit": 0, "total_profit": 12000, "total_returns": 312000,
-            "capital": 300000, "daily_rate": 0.0, "total_rate": 4.0,
-            "referral_bonus": 0, "support_level": "6-Month", "machine_emoji": "",
-        },
-        "is_active": True, "is_locking_package": True, "locking_bonus_rate": 0.0,
-        "machine_eligible": True, "machine_type": "locked",
-        "lock_minimum_days": 6, "lock_maximum_days": 6, "lock_bonus_tiers": {},
-    },
-}
+# Product catalog lives in splendour_catalog.py (single source of truth; the frontend's catalog.js is generated from it).
+from blueprints.splendour_catalog import (
+    CATALOG as express_PACKAGE_CATALOG,
+    DAILY_DAYS, validate_investment, validate_deposit, public_catalog,
+)
 
 # Derived — do not hand-maintain
 PACKAGE_MAP = {slug: pkg["display_name"] for slug, pkg in express_PACKAGE_CATALOG.items()}
@@ -178,272 +32,77 @@ PAYMENT_CHARGE = Decimal("0.00")
 # ============================================================
 
 def get_lock_bonus(package_key: str, lock_days: int) -> Tuple[float, Dict]:
-    """
-    Get lock bonus percentage and details for a package
-    Returns: (bonus_percentage, details_dict)
-    """
+    """Compatibility shim. Splendour lock plans have fixed terms and no bonus tiers."""
     catalog = express_PACKAGE_CATALOG.get(package_key)
     if not catalog:
         return 0.0, {}
-    
-    tiers = catalog.get("lock_bonus_tiers", {})
-    bonus = tiers.get(lock_days, 0.0)
-    
-    return bonus, {
-        "bonus_percentage": bonus,
-        "lock_days": lock_days,
-        "is_locking": lock_days > 0,
-        "max_bonus": catalog.get("locking_bonus_rate", 0.0)
-    }
+    return 0.0, {"bonus_percentage": 0.0, "lock_days": lock_days, "is_locking": lock_days > 0, "max_bonus": 0.0}
 
-
-# ============================================================
-# HELPER: CALCULATE LOCKED RETURNS
-# ============================================================
 
 def calculate_locked_returns(package_key: str, lock_days: int, amount: Decimal) -> Dict:
-    """
-    Calculate returns for a locked package
-    Returns: {
-        "daily_rate": float,
-        "daily_return": Decimal,
-        "total_return": Decimal,
-        "bonus_percentage": float,
-        "lock_days": int
-    }
-    """
-    catalog = express_PACKAGE_CATALOG.get(package_key)
-    if not catalog:
-        return {}
-    
-    base_rate = catalog.get("bonus_percentage", 6.0)
-    bonus, _ = get_lock_bonus(package_key, lock_days)
-    
-    total_rate = base_rate + bonus
-    daily_return = (Decimal(str(total_rate)) / Decimal("100")) * amount
-    total_return = daily_return * Decimal(str(catalog.get("duration_days", 26)))
-    
-    return {
-        "daily_rate": total_rate,
-        "daily_return": daily_return,
-        "total_return": total_return,
-        "bonus_percentage": bonus,
-        "lock_days": lock_days,
-        "is_locking": lock_days > 0,
-        "base_rate": base_rate,
-        "duration_days": catalog.get("duration_days", 26)
-    }
+    """Compatibility shim: terms come from the catalog, never from the caller."""
+    from blueprints.splendour_catalog import lock_details_for
+    return lock_details_for(package_key) or {}
 
 
 # ============================================================
 # VALIDATE PAYMENT INPUT - UPDATED WITH LOCK SUPPORT
 # ============================================================
 
+def _api_error(err):
+    body, status = err
+    return jsonify(body), status
+
+
+def _sync_catalog_row(catalog):
+    """Get the PackageCatalog row for a catalog entry; create it, or bring a stale row back in line."""
+    pkg_obj = PackageCatalog.query.filter_by(name=catalog["name"]).first()
+    if not pkg_obj:
+        pkg_obj = PackageCatalog(
+            name=catalog["name"], amount=catalog["amount"], bonus_percentage=catalog["bonus_percentage"],
+            duration_days=catalog["duration_days"], reward_description=catalog["reward_description"],
+            features=catalog.get("features", {}), is_active=True)
+        db.session.add(pkg_obj)
+        db.session.flush()
+        return pkg_obj
+    wanted = {"amount": catalog["amount"], "bonus_percentage": catalog["bonus_percentage"],
+              "duration_days": catalog["duration_days"], "reward_description": catalog["reward_description"],
+              "features": catalog.get("features", {}), "is_active": True}
+    for k, v in wanted.items():
+        if getattr(pkg_obj, k) != v:
+            setattr(pkg_obj, k, v)
+    db.session.flush()
+    return pkg_obj
+
+
 def validate_payment_input(data):
-    """Validate payment input with lock support for express."""
-    
-    print("=" * 60)
-    print("🔍 VALIDATING PAYMENT INPUT")
-    print(f"📥 Received data: {data}")
-    print("=" * 60)
-    
-    # Extract fields
-    product = data.get('product', '').lower().strip()
-    amount = data.get('amount')
-    phone = data.get('phone')
-    lock_days = data.get('lock_days', 0)
-    is_locking = data.get('is_locking', False)
-    payment_method = data.get('payment_method', 'marz').lower()
-    payment_type = data.get('payment_type', 'package').lower()
+    """
+    Entry validator for POST /payments/initiate. Returns (validated, None) or (None, (response, status)).
+      payment_type "deposit": {payment_type, amount >= 20000, phone 07XXXXXXXX}
+      payment_type "package" (default): {product: <catalog key>, amount, lock_days?}. No phone, no
+        payment method: products are bought with the user's balance. The client names a product;
+        amount, rate, term and payout come from splendour_catalog, never from the request.
+    """
+    if not isinstance(data, dict):
+        return None, _api_error(({"error": "Invalid request", "code": "BAD_REQUEST"}, 400))
+    payment_type = str(data.get("payment_type", "package")).lower().strip()
 
     if payment_type == "deposit":
-        # Validate amount
-        try:
-            amount_int = int(amount) if amount else 0
-        except (TypeError, ValueError):
-            return None, (jsonify({"error": "Invalid amount"}), 400)
-        
-        if amount_int < 500:
-            return None, (jsonify({"error": "Minimum deposit is UGX 500"}), 400)
-        
-        if amount_int > 10_000_000:
-            return None, (jsonify({"error": "Maximum deposit is UGX 10,000,000"}), 400)
-        
-        # Validate phone
-        phone_str = str(phone).strip().replace(' ', '') if phone else ''
-        if len(phone_str) < 10 or not phone_str.isdigit():
-            return None, (jsonify({"error": "Valid 10-digit phone number required"}), 400)
-        
-        return {
-            "amount": amount_int,
-            "phone": phone_str,
-            "payment_type": "deposit",
-        }, None
-    
-    # ============================================================
-    # VALIDATE PHONE NUMBER
-    # ============================================================
-    if payment_method in ['mobile', 'marz']:
-        if not phone:
-            return None, (jsonify({"error": "Phone number required for mobile money"}), 400)
-        
-        # Clean phone number
-        phone_str = str(phone).strip()
-        if not phone_str or len(phone_str) < 10:
-            return None, (jsonify({"error": "Valid 10-digit phone number required"}), 400)
+        v, e = validate_deposit(data)
+        return (None, _api_error(e)) if e else (v, None)
 
-   
-    # ============================================================
-    # VALIDATE AMOUNT
-    # ============================================================
+    if payment_type != "package":
+        return None, _api_error(({"error": "Invalid payment type.", "code": "PAYMENT_TYPE"}, 400))
+
+    v, e = validate_investment(data)
+    if e:
+        return None, _api_error(e)
     try:
-        amount_int = int(amount) if amount else 0
-    except (TypeError, ValueError):
-        return None, (jsonify({"error": f"Invalid amount format: {amount}"}), 400)
-    
-    if amount_int <= 0:
-        return None, (jsonify({"error": "Amount must be greater than 0"}), 400)
-    
-    # ============================================================
-    # VALIDATE PRODUCT
-    # ============================================================
-    if not product:
-        return None, (jsonify({"error": "Product name required"}), 400)
-    
-    # Check if product exists in catalog
-    catalog = express_PACKAGE_CATALOG.get(product)
-    if not catalog:
-        return None, (jsonify({"error": f"Product '{product}' not found"}), 404)
-    
-    # Validate amount matches catalog
-    expected_amount = catalog.get("amount")
-    if amount_int != expected_amount:
-        return None, (jsonify({
-            "error": f"Amount mismatch. Expected: {expected_amount}, Got: {amount_int}"
-        }), 400)
-    
-    # ============================================================
-    # VALIDATE LOCK DAYS
-    # ============================================================
-    lock_days_int = int(lock_days) if lock_days else 0
-    
-    if is_locking and lock_days_int > 0:
-        # Check if package supports locking
-        if not catalog.get("is_locking_package", False):
-            return None, (jsonify({
-                "error": f"Product '{product}' does not support locking"
-            }), 400)
-        
-        # Validate lock days range
-        min_days = catalog.get("lock_minimum_days", 7)
-        max_days = catalog.get("lock_maximum_days", 56)
-        
-        if lock_days_int < min_days or lock_days_int > max_days:
-            return None, (jsonify({
-                "error": f"Lock days must be between {min_days} and {max_days}"
-            }), 400)
-        
-        # Validate lock days are in tiers
-        # Validate lock days are in tiers — only if tiers are defined
-        tiers = catalog.get("lock_bonus_tiers", {})
-        if tiers and lock_days_int not in tiers:
-            return None, (jsonify({
-                "error": f"Lock days must be one of: {list(tiers.keys())}"
-            }), 400)
-    
-    # ============================================================
-    # GET OR CREATE PACKAGE CATALOG IN DB
-    # ============================================================
-    pkg_obj = PackageCatalog.query.filter_by(
-        name=catalog["name"]
-    ).first()
-    # ============================================================
-# ONE-TIME PURCHASE — 1-Day 30K (lock_1d_30k)
-# ============================================================
-
-    if not pkg_obj:
-        # Create package catalog entry if it doesn't exist
-        try:
-            pkg_obj = PackageCatalog(
-                name=catalog["name"],
-                amount=catalog["amount"],
-                bonus_percentage=catalog["bonus_percentage"],
-                duration_days=catalog["duration_days"],
-                reward_description=catalog["reward_description"],
-                features=catalog.get("features", {}),
-                is_active=True
-            )
-            db.session.add(pkg_obj)
-            db.session.flush()
-            print(f"✅ Created new PackageCatalog: {catalog['name']}")
-        except Exception as e:
-            return None, (jsonify({"error": f"Failed to create package: {str(e)}"}), 500)
-    # ============================================================
-    # ONE-TIME PURCHASE — 1-Day 30K (lock_1d_30k)
-    # ============================================================
-    ONE_TIME_PRODUCTS = {"lock_1d_30k"}
-    
-    if product in ONE_TIME_PRODUCTS:
-        user_id = session.get('user_id')
-        if not user_id:
-            return None, (jsonify({"error": "User not found"}), 400)
-        
-        already_owned = Package.query.filter_by(
-            user_id=user_id,
-            catalog_id=pkg_obj.id,
-        ).first()
-        
-        if already_owned:
-            return None, (jsonify({
-                "error": (
-                    "You have already purchased the 1-Day 30K package. "
-                    "It can only be bought once per account."
-                )
-            }), 409)
-    # ============================================================
-    # CALCULATE RETURNS IF LOCKING
-    # ============================================================
-    # lock_details = None
-    # if is_locking and lock_days_int > 0:
-    #     lock_details = calculate_locked_returns(product, lock_days_int, Decimal(str(amount_int)))
-    #     print(f"🔒 Lock details: {lock_details}")
-    lock_details = None
-    if is_locking and lock_days_int > 0:
-        lock_details = calculate_locked_returns(product, lock_days_int, Decimal(str(amount_int)))
-        
-        # ✅ Override total_return with the frontend's inflated value if provided
-        frontend_lock_total = data.get("lock_total")
-        if frontend_lock_total:
-            try:
-                lock_details["total_return"] = float(Decimal(str(frontend_lock_total)))
-                print(f"✅ Using frontend lock_total: {lock_details['total_return']}")
-            except (ValueError, TypeError) as e:
-                print(f"⚠️ Invalid lock_total from frontend: {frontend_lock_total} — {e}")
-        
-        print(f"🔒 Lock details: {lock_details}")
-
-    
-    # ============================================================
-    # BUILD VALIDATED DATA
-    # ============================================================
-    validated_data = {
-        "amount": amount_int,
-        "phone": phone_str if phone else None,
-        "product": product,
-        "product_name": catalog["name"],
-        "payment_type": payment_type,
-        "payment_method": payment_method,
-        "package_obj": pkg_obj,
-        "catalog": catalog,
-        "lock_days": lock_days_int,
-        "is_locking": is_locking and lock_days_int > 0,
-        "lock_details": lock_details
-    }
-    
-    print(f"✅ Validation successful: {validated_data}")
-    print("=" * 60)
-    
-    return validated_data, None
+        v["package_obj"] = _sync_catalog_row(v["catalog"])
+    except Exception as ex:
+        logger.error("Catalog sync failed: %s", ex, exc_info=True)
+        return None, _api_error(({"error": "Failed to prepare package", "code": "CATALOG_SYNC"}, 500))
+    return v, None
 
 
 # ============================================================
@@ -529,104 +188,80 @@ def create_payment_record(user, amount, phone, payment_type, package=None, lock_
 # CREATE USER PACKAGE - UPDATED WITH LOCK SUPPORT
 # ============================================================
 def create_user_package(user, package_catalog: PackageCatalog, lock_details=None):
-    """Create a new Package for a user after successful payment, with lock support."""
-    
+    """
+    Create the user's Package after the amount has been paid.
+      Daily plan: daily_bonus_rate = 0.03% (0.0003), runs DAILY_DAYS days.
+      Lock plan:  no daily profit (daily_bonus_rate 0). The full payout (amount + profit) is parked in
+                  wallet.locked_balance and Package.lock_earnings, and /wallet/transfer-locked moves it
+                  to actual_balance once lock_end_date has passed.
+    Does NOT commit: the caller (internal purchase route / webhook) commits, so a later failure rolls back everything.
+    """
     if not package_catalog:
         raise ValueError("Invalid package catalog")
-    
-    print("=" * 60)
-    print("📦 CREATING USER PACKAGE")
-    print(f"User: {user.id}, Package: {package_catalog.name}")
-    print(f"Lock Details: {lock_details}")
-    print("=" * 60)
-    
-    package_amount = package_catalog.amount
-    
-    # Base catalog duration (fallback 26 days)
-    duration_days = package_catalog.duration_days or 26
-    
-    # Lock duration
-    lock_duration_days = 0
-    if lock_details and lock_details.get("is_locking"):
-        lock_duration_days = lock_details.get("lock_days", 0)
-    
-    # ✅ Package must outlive the lock — extend expiry if lock is longer
-    #effective_duration_days = max(duration_days, lock_duration_days)
-    effective_duration_days = lock_duration_days if lock_duration_days > 0 else duration_days
-    # Calculate daily bonus rate
-    if lock_details and lock_details.get("is_locking"):
-        lock_daily_rate = lock_details.get("daily_rate", 6.0)
-        daily_rate = lock_daily_rate / 100
-        lock_bonus_rate = lock_details.get("bonus_percentage", 0)
+
+    is_lock = bool(lock_details and lock_details.get("is_locking"))
+    lock_days = int(lock_details.get("lock_days", 0)) if is_lock else 0
+    duration_days = lock_days if is_lock else int(package_catalog.duration_days or DAILY_DAYS)
+    if is_lock:
+        daily_rate = Decimal("0")
     else:
-        lock_daily_rate = 0
-        daily_rate = package_catalog.bonus_percentage / 100 if package_catalog.bonus_percentage else 0.06
-        lock_bonus_rate = 0
-    
+        daily_rate = Decimal(str(package_catalog.bonus_percentage)) / Decimal("100")   # 0.03 -> 0.0003
+
     now = datetime.now(timezone.utc)
-    
+    payout = Decimal(str(lock_details.get("total_return", 0))) if is_lock else Decimal("0")
+
     new_package = Package(
         user_id=user.id,
         catalog_id=package_catalog.id,
         package=package_catalog.name,
         type="purchased",
         status="active",
-        package_amount=package_amount,
-        daily_bonus_rate=Decimal(str(daily_rate)),
+        package_amount=package_catalog.amount,
+        daily_bonus_rate=daily_rate,
         total_bonus_paid=Decimal("0.00"),
         activated_at=now,
-        expires_at=now + timedelta(days=effective_duration_days),   # ✅ uses effective duration
-        # Lock fields
-        is_locked=lock_details.get("is_locking", False) if lock_details else False,
-        lock_start_date=now if lock_details and lock_details.get("is_locking") else None,
-        lock_end_date=(
-            now + timedelta(days=lock_duration_days)
-            if lock_details and lock_details.get("is_locking")
-            else None
-        ),
-        lock_duration_days=lock_duration_days,
-        lock_bonus_rate=lock_details.get("bonus_percentage", 0) if lock_details else 0,
-        lock_daily_rate=lock_daily_rate,
+        expires_at=now + timedelta(days=duration_days),
+        is_locked=is_lock,
+        lock_start_date=now if is_lock else None,
+        lock_end_date=(now + timedelta(days=lock_days)) if is_lock else None,
+        lock_duration_days=lock_days,
+        lock_bonus_rate=0,
+        lock_daily_rate=0,
         machine_details={
-            "product": package_catalog.name,
-            "is_locking": lock_details.get("is_locking", False) if lock_details else False,
-            "daily_rate": lock_details.get("daily_rate", 6.0) if lock_details else 6.0,
-            "duration_days": effective_duration_days,        # ✅ what the package actually runs for
-            "catalog_duration_days": duration_days,          # original catalog value
-            "lock_duration_days": lock_duration_days,        # lock length
-            "lock_bonus_rate": lock_bonus_rate,
-            "total_return": float(lock_details.get("total_return", 0)) if lock_details else 0
-        } if lock_details else {}
+            "product": package_catalog.name, "is_locking": True, "duration_days": duration_days,
+            "lock_duration_days": lock_days, "total_return": float(payout),
+            "profit": float(lock_details.get("profit", 0)),
+        } if is_lock else {},
     )
-    
     db.session.add(new_package)
-    db.session.flush() 
+    db.session.flush()
 
-    if lock_details and lock_details.get("is_locking"):
-        lock_payout = Decimal(str(lock_details.get("total_return", 0)))
-        if lock_payout > 0:
-            if not user.wallet:
-                from models import Wallet
-                user.wallet = Wallet(user_id=user.id, balance=0, locked_balance=0)
-                db.session.add(user.wallet)
-                db.session.flush()
-            
-            current_locked = Decimal(str(user.wallet.locked_balance or 0))
-            user.wallet.locked_balance = float(current_locked + lock_payout)
-            new_package.lock_earnings = float(lock_payout)
-            print(f"🔒 Credited {lock_payout} to locked balance; matures {new_package.lock_end_date}")
+    if is_lock and payout > 0:
+        if not user.wallet:
+            from models import Wallet
+            user.wallet = Wallet(user_id=user.id, balance=0, locked_balance=0)
+            db.session.add(user.wallet)
+            db.session.flush()
+        user.wallet.locked_balance = float(Decimal(str(user.wallet.locked_balance or 0)) + payout)
+        new_package.lock_earnings = float(payout)
+        logger.info("Locked %s for user %s, matures %s", payout, user.id, new_package.lock_end_date)
 
-        db.session.commit()
-    
-    print(f"✅ Package created with ID: {new_package.id}")
-    print(f"📋 Locked: {new_package.is_locked}")
-    print(f"📋 Catalog Duration: {duration_days} days")
-    print(f"📋 Lock Duration: {lock_duration_days} days")
-    print(f"📋 Effective Expiry: {effective_duration_days} days")
-    print(f"📋 Lock Daily Rate: {lock_daily_rate}%, Lock Bonus: {lock_bonus_rate}%")
-    print("=" * 60)
-    
     return new_package
+
+
+def sync_package_catalog():
+    """One-off / deploy-time: upsert every catalog product and deactivate old catalog rows.
+    Existing user Packages keep their catalog_id, so history is untouched.  Run from `flask shell`."""
+    names = set()
+    for c in express_PACKAGE_CATALOG.values():
+        _sync_catalog_row(c)
+        names.add(c["name"])
+    stale = PackageCatalog.query.filter(~PackageCatalog.name.in_(names)).all()
+    for row in stale:
+        row.is_active = False
+    db.session.commit()
+    return {"active": len(names), "deactivated": [r.name for r in stale]}
+
 
 # ============================================================
 # SEND TO MARZPAY - UPDATED
