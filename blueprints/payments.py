@@ -531,7 +531,7 @@ def _record_webhook(webhook_id, event, payload=None, signature=None, reference=N
     try:
         with db.session.begin_nested():
             db.session.add(WebhookEvent(
-                # provider="pesajet",
+                provider="pesajet",
                 event_type=event or "unknown",
                 payload=payload or {},
                 signature=signature,
@@ -996,7 +996,7 @@ def _handle_marz_callback(raw_body: bytes):
         # 7. Duplicate guard
         if payment.status in (PaymentStatus.COMPLETED.value, PaymentStatus.FAILED.value):
             print(f"⚠️ Payment already final: {payment.status}")
-            _record_webhook(webhook_id, normalized["event"], data, None, ext_uuid, provider="marz")
+            _record_webhook(webhook_id, normalized["event"], data, None, ext_uuid)
             db.session.commit()
             return jsonify({"status": "already_final"}), 200
 
@@ -1123,7 +1123,7 @@ def payment_callback():
             data,
             request.headers.get("X-Webhook-Signature"),
             data.get("transactionId"),
-            provider=provider,
+           # provider=provider,
         )
         db.session.commit()
     except IntegrityError:

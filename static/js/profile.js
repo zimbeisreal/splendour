@@ -22,7 +22,7 @@
   const F = { actual: 'actual_balance', wallet: 'wallet_balance', welcome: 'welcome_bonus', available: 'available_balance',
     referral: 'referral_bonus', locked: 'locked_balance', pending: 'pending_profit', invested: 'has_invested', phone: 'phone' };
   const LOGIN_URL = '/';
-  const R = { minDeposit: CAT.minDeposit || 20000, minWithdraw: 3000, minInvest: CAT.minInvest || 20000, fee: 0.05, waitSec: 300, pollMs: 5000 };
+  const R = { minDeposit: CAT.minDeposit || 20000, minWithdraw: 3000, minInvest: CAT.minInvest || 20000, fee: 0.10, waitSec: 300, pollMs: 5000 };
   const VIEWS = ['wallet', 'deposit', 'daily', 'lock', 'team', 'profile'];
   const STATS = [['pending', 'Profit on its way', 'Daily profit that is added to your balance 24 hours after it is earned.'],
     ['locked', 'Locked in lock plans', 'Money inside your lock plans. It is released when each plan ends.'],
@@ -49,7 +49,7 @@
         pending_bonus: { total: 18, count: 3, next_matures_at: null },
         packages: M.w.has_invested ? [{ id: 1, display_name: 'Quartz', name: 'Quartz 20K', amount: 20000, status: 'active', daily_profit: 6, total_returns: 20156, duration_days: 26, days_active: 9, days_remaining: 17, progress: 35, is_locked: false },
           { id: 2, display_name: 'Vault 50K', name: 'Vault 50K', amount: 50000, status: 'active', daily_profit: 0, duration_days: 30, days_active: 12, days_remaining: 18, progress: 40, is_locked: true, lock_end_date: '2026-11-27T09:00:00Z', lock_earnings: 52000 }] : [] });
-      if (url === API.earnings) return out({ breakdown: { wallet_balance: String(M.w.wallet_balance), locked_wallet_balance: '52000.00' } });
+      if (url === API.earnings) return out({ breakdown: { wallet_balance: String(M.w.wallet_balance), locked_wallet_balance: '72000.00' } });
       if (url === API.notes) return out(M.n);
       if (url.indexOf(API.notes + '/') === 0 && method === 'PUT') { const n = M.n.find(x => url.indexOf('/' + x.id + '/') > 0); if (n) n.is_read = true; return out({ success: true }); }
       if (url === API.link) return out({ success: true, referral_code: 'SPL4821' });
@@ -72,7 +72,7 @@
   }
   async function call(url, method, body) {
     if (DEMO) return mock(url, method, body);
-    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000); let res, text;
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 60000); let res, text;
     try {
       res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: body ? JSON.stringify(body) : undefined, credentials: 'include', cache: 'no-store', signal: ctl.signal });
@@ -223,7 +223,7 @@
   const pad = i => '<svg viewBox="0 0 24 24" width="' + (34 + i * 4) + '" height="' + (34 + i * 4) + '" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.2" fill="#8FB2FF" stroke="none"/></svg>';
   const SETS = [{ data: PD, list: $('plans'), need: $('needDep'), pic: gem }, { data: LK, list: $('lockPlans'), need: $('needDepLock'), pic: pad }];
   let cur = null;
-  const okHint = d => d.kind === 'lock' ? 'Locked for ' + d.days + ' days. You get ' + fmt(d.total) + ' back at the end, ' + fmt(d.profit) + ' profit.' : 'Profit is added every 24 hours. Your ' + fmt(d.amount) + ' comes back on day 26.';
+  const okHint = d => d.kind === 'lock' ? 'Locked for ' + d.days + ' days. You get ' + fmt(d.total) + ' back at the end, ' + fmt(d.profit) + ' profit.' : 'Profit is added every 24 hours. Your ' + fmt(d.amount) + ' comes back as daily profits.';
   SETS.forEach(S => S.data.forEach((d, i) => {
     const lock = d.kind === 'lock', c = document.createElement('article'); c.className = 'plan'; c.dataset.i = i;
     c.innerHTML = '<div class="pic t' + (i % 3) + '">' + S.pic(i) + '</div><div class="pbody"><h3></h3><p class="pl"></p><p class="row"><span></span><b></b></p><p class="row"><span></span><b></b></p><p class="hint ph"></p><button class="btn primary" type="button">INVEST</button></div>';
@@ -363,7 +363,7 @@
       const pr = Math.max(0, Math.min(100, num(k.progress))); bar.setAttribute('aria-valuenow', String(pr)); bar.setAttribute('aria-label', 'Progress of ' + (k.display_name || k.name));
       const i = document.createElement('i'); i.style.width = pr + '%'; bar.appendChild(i);
       const d = document.createElement('p'); d.className = 'hint';
-      d.textContent = (k.is_locked ? 'Locked until ' + dt(k.lock_end_date) + '. You receive ' + fmt(k.lock_earnings) + '.' : 'Earns ' + fmt(k.daily_profit) + ' a day. Your ' + fmt(k.amount) + ' returns on the last day.')
+      d.textContent = (k.is_locked ? 'Locked until ' + dt(k.lock_end_date) + '. You receive ' + fmt(k.lock_earnings) + '.' : 'Earns ' + fmt(k.daily_profit) + ' a day. Your ' + fmt(k.amount) + ' returns in daily earnings.')
         + ' Day ' + Math.min(num(k.days_active), num(k.duration_days)) + ' of ' + num(k.duration_days) + ', ' + num(k.days_remaining) + ' days left.';
       c.append(h, bar, d); box.appendChild(c);
     });

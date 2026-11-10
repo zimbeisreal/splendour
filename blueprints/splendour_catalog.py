@@ -20,14 +20,14 @@ import sys
 from decimal import Decimal, ROUND_HALF_UP
 
 # ------------------------------------------------------------------ plan tables (edit here only)
-DAILY_RATE_PCT = Decimal("0.03")     # percent per day
+DAILY_RATE_PCT = Decimal("0.06")     # percent per day
 DAILY_DAYS = 26
 DAILY_PLANS = [("Quartz", 20000), ("Topaz", 40000), ("Amber", 60000), ("Garnet", 100000),
                ("Opal", 200000), ("Citrine", 300000), ("Sapphire", 500000), ("Emerald", 700000),
                ("Ruby", 1000000), ("Amethyst", 2000000), ("Diamond", 4000000)]
 # (amount locked, total paid at maturity, days)
-LOCK_PLANS = [(50000, 52000, 30), (80000, 83000, 30), (100000, 105000, 60), (150000, 160000, 30),
-              (200000, 210000, 50), (500000, 550000, 120), (1000000, 1060000, 120)]
+LOCK_PLANS = [(50000, 72000, 13), (80000, 112600, 13), (100000, 142000, 13), (150000, 213000, 13),
+              (200000, 332000, 26), (500000, 790000, 26), (1000000, 1650000, 26)]
 
 MIN_DEPOSIT = 20000
 MAX_DEPOSIT = 10_000_000

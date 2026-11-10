@@ -112,12 +112,9 @@ window.SPLENDOUR_CATALOG = {
     "daily": 240000,
     "profit": 2240000,
     "total": 6240000
-  }
-
-
-    ,
+  },
   {
-   "key": "lock_50000_30",
+   "key": "lock_50000_13",
    "name": "Vault 50K",
    "kind": "lock",
    "amount": 50000,
@@ -127,7 +124,7 @@ window.SPLENDOUR_CATALOG = {
    "total": 72000
   },
   {
-   "key": "lock_80000_30",
+   "key": "lock_80000_13",
    "name": "Vault 80K",
    "kind": "lock",
    "amount": 80000,
@@ -137,7 +134,7 @@ window.SPLENDOUR_CATALOG = {
    "total": 112600
   },
   {
-   "key": "lock_100000_60",
+   "key": "lock_100000_13",
    "name": "Vault 100K",
    "kind": "lock",
    "amount": 100000,
@@ -147,7 +144,7 @@ window.SPLENDOUR_CATALOG = {
    "total": 142000
   },
   {
-   "key": "lock_150000_30",
+   "key": "lock_150000_13",
    "name": "Vault 150K",
    "kind": "lock",
    "amount": 150000,
@@ -157,7 +154,7 @@ window.SPLENDOUR_CATALOG = {
    "total": 213000
   },
   {
-   "key": "lock_200000_50",
+   "key": "lock_200000_26",
    "name": "Vault 200K",
    "kind": "lock",
    "amount": 200000,

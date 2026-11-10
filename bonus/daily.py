@@ -28,11 +28,11 @@ class DailyBonusProcessor:
     """Daily bonus processor - handles both regular and locked packages with tier-specific rates"""
     
     # Standard package rates
-    STANDARD_DAILY_RATE = Decimal("0.15")  # 5% daily for standard packages
-    STANDARD_MAX_PAYOUT = Decimal("0.60")  # 75% max for standard packages
+    STANDARD_DAILY_RATE = Decimal("0.06")  # 5% daily for standard packages
+    STANDARD_MAX_PAYOUT = Decimal("1.20")  # 75% max for standard packages
     
     # Locked package max payout (100% of package amount)
-    LOCKED_MAX_PAYOUT = Decimal("0.45")
+    LOCKED_MAX_PAYOUT = Decimal("1.40")
     
     BONUS_COOLDOWN_HOURS = 0
     FIRST_BONUS_WAIT_HOURS = 0
