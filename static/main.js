@@ -8,7 +8,7 @@
   const TIMEOUT_MS = 20000;
   const ADMIN_ROLES = ['admin', 'sub_admin', 'super_admin'];
   /* PLACEHOLDER: WhatsApp opens a chat with the company number, not a group. Set real invite URLs here. */
-  const LINKS = { whatsapp: 'https://wa.me/256782570103', telegram: '' };
+  const LINKS = { whatsapp: 'https://chat.whatsapp.com/EYu0JqhLOaK0ghuoFlaqmV?s=cl&p=a&iam=2', telegram: 'https://t.me/+gXprn7wKYOkyMzg0' };
   const MSG = {
     network: 'No internet connection. Check your network.',
     s405: 'This action is not allowed. Refresh the page and try again.',
