@@ -107,7 +107,7 @@
         localStorage.setItem('userRole', role);
         if (data.user) localStorage.setItem('userData', JSON.stringify(data.user));
       } catch (_) { /* storage unavailable */ }
-      showStatus('Welcome back!', 'ok');
+      showStatus('Welcome To Splendour. Enjoy!', 'ok');
       const admin = ADMIN_ROLES.includes(role);
       return setTimeout(() => location.replace(admin ? '/admin/dashboard' : '/profile?show_welcome=true'), 1000);
     }
@@ -143,7 +143,7 @@
 
     if (res.status === 201 || res.status === 200) {
       $('user').value = phone; $('pass').value = '';
-      showStatus('Account created! Please log in.', 'ok');
+      showStatus('You have created account sucessfully.', 'ok');
       return setTimeout(() => { setMode('login'); $('pass').focus(); }, 1500);
     }
     showStatus(res.status === 405 ? MSG.s405 : res.status >= 500 ? MSG.s500 : serverText(data, ['error', 'message']), 'bad');

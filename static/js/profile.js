@@ -48,7 +48,7 @@
         actualBalance: M.w.actual_balance, welcomeBonus: M.w.welcome_bonus, referralBonus: M.w.referral_bonus, total_packages: M.w.has_invested ? 1 : 0,
         pending_bonus: { total: 18, count: 3, next_matures_at: null },
         packages: M.w.has_invested ? [{ id: 1, display_name: 'Quartz', name: 'Quartz 20K', amount: 20000, status: 'active', daily_profit: 6, total_returns: 20156, duration_days: 26, days_active: 9, days_remaining: 17, progress: 35, is_locked: false },
-          { id: 2, display_name: 'Vault 50K', name: 'Vault 50K', amount: 50000, status: 'active', daily_profit: 0, duration_days: 30, days_active: 12, days_remaining: 18, progress: 40, is_locked: true, lock_end_date: '2026-11-27T09:00:00Z', lock_earnings: 52000 }] : [] });
+          { id: 2, display_name: 'Vault 50K', name: 'Vault 50K', amount: 50000, status: 'active', daily_profit: 0, duration_days: 30, days_active: 12, days_remaining: 18, progress: 40, is_locked: true, lock_end_date: '2026-11-27T09:00:00Z', lock_earnings: 72000 }] : [] });
       if (url === API.earnings) return out({ breakdown: { wallet_balance: String(M.w.wallet_balance), locked_wallet_balance: '72000.00' } });
       if (url === API.notes) return out(M.n);
       if (url.indexOf(API.notes + '/') === 0 && method === 'PUT') { const n = M.n.find(x => url.indexOf('/' + x.id + '/') > 0); if (n) n.is_read = true; return out({ success: true }); }
