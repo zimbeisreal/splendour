@@ -62,9 +62,9 @@ salary_bp = Blueprint("salary_api", __name__, url_prefix="/api/salary")
 # =====================================================================
 # 1. RULES  (pure logic: no Flask / DB use below this banner until section 2)
 # =====================================================================
-MONTHLY_AMOUNT = Decimal("10000")
+MONTHLY_AMOUNT = Decimal("50000")
 MONTHLY_THRESHOLD = Decimal("250000")
-MONTHLY_INTERVAL_DAYS = 30
+MONTHLY_INTERVAL_DAYS = 26
 MONTHLY_FIRST_PAY_DELAY_DAYS = 0      # 0 = first salary the moment they qualify
 GROUP_SIZE = 3
 GROUP_AMOUNT = Decimal("5000")
