@@ -155,7 +155,7 @@ def signup():
             signup_bonus = Bonus(
                 user_id=new_user.id,
                 type="signup",
-                amount=4000,
+                amount=3000,
                 status="active"
             )
             db.session.add(signup_bonus)

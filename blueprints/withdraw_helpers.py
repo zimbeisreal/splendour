@@ -23,19 +23,22 @@ logger = logging.getLogger(__name__)
 #                  CONFIGURATION
 # ==========================================================
 class WithdrawalConfig:
-    MIN_WITHDRAWAL = Decimal("3000")
+    MIN_WITHDRAWAL = Decimal("4000")
     MAX_WITHDRAWAL = Decimal("10000")
     MAX_WITHDRAWAL_HARD = Decimal("1000000")
     ADMIN_REVIEW_THRESHOLD = Decimal("10000")
     WALLET_HOLD_PERIOD_HOURS = 24
     DAILY_WITHDRAWAL_LIMIT = 1
     BUSINESS_TIMEZONE = ZoneInfo("Africa/Kampala")
-    WEEKDAY_FEE = Decimal("10.00")
-    WEEKEND_FEE = Decimal("10.00")
+    WEEKDAY_FEE = Decimal("5.00")
+    WEEKEND_FEE = Decimal("5.00")
+    FEE_FREE_BELOW = Decimal("3000") 
     
 
     @staticmethod
     def get_processing_fee_percent():
+        # if amount is not None and amount < WithdrawalConfig.FEE_FREE_BELOW:
+        #  return Decimal("0")
         now = datetime.now(WithdrawalConfig.BUSINESS_TIMEZONE)
         weekday = now.weekday()
 
@@ -55,6 +58,9 @@ class WithdrawalConfig:
     @staticmethod
     def calculate_fee(amount: Decimal) -> Decimal:
         processing_fee_percent = WithdrawalConfig.get_processing_fee_percent()
+
+        if amount < WithdrawalConfig.FEE_FREE_BELOW:
+            return Decimal("0.00")
 
         fee = (amount * processing_fee_percent) / Decimal("100")
 
