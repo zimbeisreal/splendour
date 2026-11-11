@@ -4,7 +4,7 @@
 :root[data-theme="dark"]{--page:#0D0A1F;--bg:#14102A;--text:#EDE9FA;--muted:#A9A1CC;--field:#1E1840;--border:#3A3170;--link:#8FB2FF;--err:#FF9A92;--ok:#6FD3A0;--shadow:none}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{font:400 15px/1.45 Poppins,system-ui,sans-serif;background:var(--page);color:var(--text);overflow:hidden}
+body{font:400 15px/1.45 Poppins,system-ui,sans-serif;background:var(--page);color:var(--text);}
 button,input{font:inherit;color:inherit}
 :focus-visible{outline:3px solid var(--sky);outline-offset:2px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

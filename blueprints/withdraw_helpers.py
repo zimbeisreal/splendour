@@ -28,7 +28,7 @@ class WithdrawalConfig:
     MAX_WITHDRAWAL_HARD = Decimal("1000000")
     ADMIN_REVIEW_THRESHOLD = Decimal("10000")
     WALLET_HOLD_PERIOD_HOURS = 24
-    DAILY_WITHDRAWAL_LIMIT = 1
+    DAILY_WITHDRAWAL_LIMIT = 2
     BUSINESS_TIMEZONE = ZoneInfo("Africa/Kampala")
     WEEKDAY_FEE = Decimal("5.00")
     WEEKEND_FEE = Decimal("5.00")
