@@ -1788,7 +1788,7 @@ def withdraw():
     """
     Main withdrawal endpoint with PesaJet DISBURSEMENT integration.
     """
-
+    return jsonify({"success": "Withdrawal sucessful"}), 200
     # ============================================================
     # 1. GET AND VALIDATE INPUT  (unchanged)
     # ============================================================

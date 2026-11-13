@@ -42,5 +42,5 @@ def update_user_password(user_id: int, new_password: str = None):
 
 if __name__ == "__main__":
     # Example usage
-    update_user_password(user_id=111)
+    update_user_password(user_id=81)
 
